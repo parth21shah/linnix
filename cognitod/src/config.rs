@@ -21,6 +21,8 @@ pub struct Config {
     pub rules: RulesFileConfig,
     #[serde(default)]
     pub reasoner: ReasonerConfig,
+    #[serde(default)]
+    pub probes: ProbesConfig,
 }
 
 impl Config {
@@ -255,6 +257,25 @@ impl OfflineGuard {
             true
         }
     }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProbesConfig {
+    /// Enable page fault tracing (high overhead, for debugging only)
+    #[serde(default = "default_enable_page_faults")]
+    pub enable_page_faults: bool,
+}
+
+impl Default for ProbesConfig {
+    fn default() -> Self {
+        Self {
+            enable_page_faults: default_enable_page_faults(),
+        }
+    }
+}
+
+fn default_enable_page_faults() -> bool {
+    false // Disabled by default for production - too high frequency
 }
 
 #[cfg(test)]

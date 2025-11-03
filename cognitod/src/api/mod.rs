@@ -609,11 +609,7 @@ pub async fn stream_alerts(
     let combined: BoxStream<Result<Event, std::convert::Infallible>> =
         futures_util::stream::select(alert_stream, keepalive).boxed();
 
-    Sse::new(combined).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(10))
-            .text("keep-alive"),
-    )
+    Sse::new(combined)
 }
 
 pub async fn system_snapshot(State(app_state): State<Arc<AppState>>) -> Json<SystemSnapshot> {
@@ -715,6 +711,11 @@ pub async fn get_insights(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
     let ctx = &app_state.context;
+    
+    // Update system snapshot on-demand for insights (critical for LLM analysis)
+    ctx.update_system_snapshot();
+    ctx.update_process_stats();
+    
     // Fetch system state
     let system = ctx.get_system_snapshot();
     // Fetch alerts (limit to top 5 for prompt brevity)

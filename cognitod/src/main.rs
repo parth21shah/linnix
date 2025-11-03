@@ -219,6 +219,7 @@ fn read_rss_trace_bytes() -> anyhow::Result<(Vec<u8>, String)> {
 fn init_ebpf(
     bpf_bytes: &[u8],
     telemetry_cfg: TelemetryConfig,
+    enable_page_faults: bool,
 ) -> anyhow::Result<(BpfRuntimeGuards, Vec<PerfEventArrayBuffer<MapData>>)> {
     let telemetry = TelemetryConfigPod(telemetry_cfg);
     let mut loader = EbpfLoader::new();
@@ -280,18 +281,24 @@ fn init_ebpf(
         }
     };
 
-    attach_btf_tracepoint_optional(
-        &mut bpf,
-        "trace_page_fault_user",
-        "page_fault_user",
-        btf.as_ref(),
-    );
-    attach_btf_tracepoint_optional(
-        &mut bpf,
-        "trace_page_fault_kernel",
-        "page_fault_kernel",
-        btf.as_ref(),
-    );
+    // PageFault tracing is optional and controlled by config (high overhead)
+    if enable_page_faults {
+        info!("[cognitod] PageFault tracing ENABLED (debug mode - high overhead)");
+        attach_btf_tracepoint_optional(
+            &mut bpf,
+            "trace_page_fault_user",
+            "page_fault_user",
+            btf.as_ref(),
+        );
+        attach_btf_tracepoint_optional(
+            &mut bpf,
+            "trace_page_fault_kernel",
+            "page_fault_kernel",
+            btf.as_ref(),
+        );
+    } else {
+        info!("[cognitod] PageFault tracing DISABLED (production mode for <1% CPU overhead)");
+    }
 
     info!("[cognitod] Program attached. Setting up perf buffers...");
 
@@ -468,7 +475,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let telemetry_cfg = result.config;
                 let (bpf_bytes, chosen_path) = read_bpf_bytes()?;
                 println!("[cognitod] Using BPF object: {chosen_path}");
-                match init_ebpf(&bpf_bytes, telemetry_cfg) {
+                match init_ebpf(&bpf_bytes, telemetry_cfg, config.probes.enable_page_faults) {
                     Ok((guards, buffers)) => {
                         transport = "perf";
                         perf_buffers = buffers;
@@ -781,24 +788,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    // 🔁 Periodically refresh system snapshot
+    // 🔁 Periodically refresh system snapshot (conditional on activity)
     let ctx_clone = Arc::clone(&context);
     let handlers_clone = Arc::clone(&handlers);
+    let metrics_clone = Arc::clone(&metrics);
+    let reasoner_cfg = config.reasoner.clone();
     tokio::spawn(async move {
         loop {
-            ctx_clone.update_system_snapshot();
-            let snap = ctx_clone.get_system_snapshot();
-            handlers_clone.on_snapshot(&snap).await;
+            // Only update when system is active (events/sec >= reasoner threshold)
+            let eps = metrics_clone.events_per_sec();
+            let is_active = eps >= reasoner_cfg.min_eps_to_enable;
+            
+            if is_active {
+                ctx_clone.update_system_snapshot();
+                let snap = ctx_clone.get_system_snapshot();
+                handlers_clone.on_snapshot(&snap).await;
+            }
+            
             sleep(Duration::from_secs(5)).await;
         }
     });
 
-    // 🔁 Periodically update process stats
+    // 🔁 Periodically update process stats (conditional on activity)
     let ctx_clone = Arc::clone(&context);
+    let metrics_clone = Arc::clone(&metrics);
+    let reasoner_cfg = config.reasoner.clone();
     tokio::spawn(async move {
         loop {
-            ctx_clone.update_process_stats();
-            sleep(Duration::from_secs(5)).await; // Adjust interval as needed
+            // Only update when system is active (events/sec >= reasoner threshold)
+            let eps = metrics_clone.events_per_sec();
+            let is_active = eps >= reasoner_cfg.min_eps_to_enable;
+            
+            if is_active {
+                ctx_clone.update_process_stats();
+            }
+            
+            sleep(Duration::from_secs(5)).await;
         }
     });
 
