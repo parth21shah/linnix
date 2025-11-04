@@ -91,3 +91,7 @@ test_reasoner_integration.sh
 # Runtime
 cognitod.pid
 notebooks/
+
+# Model files (download separately)
+models/*.gguf
+models/*.bin

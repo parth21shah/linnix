@@ -1,0 +1,119 @@
+# Linnix AI Models
+
+This directory contains language models for AI-powered incident detection.
+
+## Available Models
+
+### TinyLlama 1.1B (Testing)
+- **File**: `tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf`
+- **Size**: 747 MB
+- **Use Case**: Testing and development
+- **Source**: [TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF](https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF)
+- **License**: Apache 2.0
+
+### Linnix 3B Distilled (Production) - Coming Soon
+- **File**: `linnix-3b-distilled-q5_k_m.gguf`
+- **Size**: ~2.1 GB
+- **Use Case**: Production incident detection
+- **Training**: Fine-tuned on system observability incidents
+- **License**: Apache 2.0
+- **Download**: Will be available in GitHub Releases
+
+## Quick Setup
+
+### Option 1: Automatic Download (Recommended)
+```bash
+./setup-llm.sh
+```
+
+This script will:
+1. Download the TinyLlama model (800MB)
+2. Start cognitod + llama-server with Docker Compose
+3. Verify both services are healthy
+
+### Option 2: Manual Download
+
+**TinyLlama (for testing):**
+```bash
+mkdir -p models
+cd models
+wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf
+```
+
+**Linnix 3B (when released):**
+```bash
+wget https://github.com/linnix-os/linnix/releases/download/v0.1.0/linnix-3b-distilled-q5_k_m.gguf
+```
+
+### Option 3: Use Custom Model
+
+Place any GGUF model in this directory and update `docker-compose.llm.yml`:
+
+```yaml
+command:
+  - -m
+  - /models/your-custom-model.gguf
+```
+
+## Model Performance
+
+| Model | Size | Inference Speed | Accuracy | Best For |
+|-------|------|----------------|----------|----------|
+| TinyLlama 1.1B | 747 MB | ~50 tokens/sec | Good | Testing, development |
+| Linnix 3B | 2.1 GB | ~30 tokens/sec | Excellent | Production use |
+| Linnix 7B (future) | 4.5 GB | ~15 tokens/sec | Best | Enterprise, complex incidents |
+
+*Benchmarks on 8-core CPU, no GPU*
+
+## System Requirements
+
+### Minimum (TinyLlama)
+- RAM: 2 GB
+- CPU: 2 cores
+- Disk: 1 GB
+
+### Recommended (Linnix 3B)
+- RAM: 4 GB
+- CPU: 4 cores
+- Disk: 3 GB
+
+### Enterprise (Linnix 7B)
+- RAM: 8 GB
+- CPU: 8 cores (or GPU)
+- Disk: 6 GB
+
+## Troubleshooting
+
+### Model download fails
+```bash
+# Check internet connection
+curl -I https://huggingface.co
+
+# Use alternative download tool
+curl -L -o models/tinyllama.gguf https://...
+```
+
+### Out of memory errors
+```bash
+# Reduce context size in docker-compose.llm.yml
+--ctx-size 1024  # instead of 2048
+```
+
+### Slow inference
+```bash
+# Reduce thread count
+-t 2  # instead of 4
+```
+
+## License
+
+- **TinyLlama**: Apache 2.0 (third-party model)
+- **Linnix Models**: Apache 2.0 (our fine-tuned models)
+- See [LICENSE](../LICENSE) for full text
+
+## Contributing
+
+Want to improve the models? See:
+- [Model Training Guide](../docs/model-training.md)
+- [Dataset Format](../datasets/README.md)
+- [Contributing Guidelines](../CONTRIBUTING.md)
