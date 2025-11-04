@@ -97,9 +97,21 @@ debug_llm_prompt.sh
 show_process_format.sh
 test_process_output.sh
 test_reasoner_integration.sh
+# Internal development scripts
 demo_reasoner_with_processes.sh
 explain_ebpf_overhead.sh
 test_ebpf_overhead.sh
+scripts/connect_runpod_vscode.sh
+scripts/convert_7b_to_gguf.sh
+scripts/deploy_distilled_model.sh
+scripts/merge_lora_on_runpod.py
+scripts/migrate_to_enterprise.sh
+scripts/migrate_to_larger_pod.sh
+scripts/runpod_ssh_setup.sh
+scripts/runpod_upgrade_analysis.sh
+scripts/setup_colab_endpoint.sh
+scripts/test_gguf_performance.sh
+scripts/upload_finetuned_to_runpod.sh
 
 # Release notes (use GitHub releases instead)
 RELEASE_NOTES_*.md
