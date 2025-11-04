@@ -11,7 +11,7 @@ Linnix captures every process fork, exec, and exit with lightweight CPU/memory t
 
 > **✨ NEW**: **linnix-3b model now available!** Download the 2.1GB quantized model from [Releases](https://github.com/linnix-os/linnix/releases/tag/v0.1.0) or use the automated setup script.
 
-> **Note**: This is the open-source version. For custom model training, advanced datasets, and enterprise features, see [Linnix Enterprise](https://linnix.io/enterprise) and [FEATURE_DISTRIBUTION.md](FEATURE_DISTRIBUTION.md).
+> **Note**: This is the open-source version with full eBPF monitoring and AI-powered incident detection. For custom model training, enterprise support, and advanced features, see [Linnix Enterprise](https://linnix.io/enterprise).
 
 ## 🎯 Why Linnix?
 
@@ -245,7 +245,7 @@ linnix-reasoner --insights
 
 You can also use commercial APIs (OpenAI, Anthropic, etc.) by pointing to their endpoints.
 
-> **Enterprise**: Get custom-trained models fine-tuned on your specific workloads. See [FEATURE_DISTRIBUTION.md](FEATURE_DISTRIBUTION.md) for details.
+> **Enterprise**: Get custom-trained models fine-tuned on your specific workloads. [Contact sales](https://linnix.io/enterprise) for details.
 
 ## 🔧 Configuration
 

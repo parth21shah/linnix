@@ -225,7 +225,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - **AI Model**: Apache-2.0 (linnix-3b-distilled)
 - **Documentation**: CC-BY-4.0
 
-See [LICENSE](LICENSE) and [FEATURE_DISTRIBUTION.md](FEATURE_DISTRIBUTION.md) for full details.
+See [LICENSE](LICENSE) for full details.
 
 ## 🙏 Credits
 

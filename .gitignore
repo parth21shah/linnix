@@ -61,16 +61,33 @@ H200_DISTILLATION_SUCCESS_REPORT.md
 docs/colab-gpu-setup.md
 docs/upload-lora-to-runpod.md
 docs/README-PERFORMANCE.md
+docs/distillation-guide.md
 scripts/connect_runpod_vscode.sh
 scripts/convert_7b_to_gguf.sh
 scripts/merge_lora_on_runpod.py
 scripts/migrate_to_larger_pod.sh
+scripts/migrate_to_enterprise.sh
 scripts/runpod_ssh_setup.sh
 scripts/runpod_upgrade_analysis.sh
 scripts/setup_colab_endpoint.sh
 scripts/test_gguf_performance.sh
 scripts/upload_finetuned_to_runpod.sh
+scripts/deploy_distilled_model.sh
 test_gguf_model.py
+test_h200_model.py
+benchmark_distilled_model.sh
+serve_distilled_model.sh
+.env.distilled
+
+# Internal documentation (development notes, not for release)
+MIGRATION_PLAN.md
+MIGRATION_EXECUTION_REPORT.md
+FEATURE_DISTRIBUTION.md
+DISTILLED_MODEL_INTEGRATION.md
+PROCESS_NAMES_ENHANCEMENT.md
+QUICKSTART_PROCESS_NAMES.md
+DOCKER_TEST*.md
+H200_*.md
 
 # Debug/temporary scripts
 debug_llm_prompt.sh
