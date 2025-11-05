@@ -69,6 +69,7 @@ impl Metrics {
     /// Record an incoming event. Returns true if the event should be
     /// processed, false if it should be sampled out according to the
     /// provided cap.
+    #[allow(clippy::manual_is_multiple_of)] // is_multiple_of not stable in nightly-2024-12-10
     pub fn record_event(&self, cap: u64, event_type: u32) -> bool {
         const SAMPLE_N: u64 = 10; // keep 1 in N events for critical events
         let count = self.events_this_sec.fetch_add(1, Ordering::Relaxed) + 1;
@@ -78,7 +79,7 @@ impl Metrics {
                 self.record_drop(event_type);
                 return false;
             }
-            if !count.is_multiple_of(SAMPLE_N) {
+            if count % SAMPLE_N != 0 {
                 self.record_drop(event_type);
                 return false;
             }
