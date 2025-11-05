@@ -22,7 +22,7 @@ fn main() -> Result<()> {
 
 fn build_ebpf() -> Result<()> {
     let status = Command::new("cargo")
-        .args(&[
+        .args([
             "build",
             "--package",
             "linnix-ai-ebpf-ebpf",
