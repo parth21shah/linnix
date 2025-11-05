@@ -414,8 +414,9 @@ fn enum_value(btf: &Btf, enum_name: &str, variant: &str) -> Result<u64> {
     }
 }
 
+#[allow(clippy::manual_is_multiple_of)] // is_multiple_of not stable in nightly-2024-12-10
 fn to_bytes(bits: u32) -> Result<u32> {
-    if bits.is_multiple_of(8) {
+    if bits % 8 == 0 {
         Ok(bits / 8)
     } else {
         Err(anyhow!("member offset {bits} is not byte aligned"))
