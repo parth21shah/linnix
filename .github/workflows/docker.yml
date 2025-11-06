@@ -137,7 +137,7 @@ jobs:
           # Use locally built images for testing
           export COGNITOD_IMAGE=ghcr.io/${{ env.COGNITOD_IMAGE_NAME }}:${{ github.sha }}
           export LLAMA_IMAGE=ghcr.io/${{ env.LLAMA_IMAGE_NAME }}:${{ github.sha }}
-          docker-compose up -d
+          docker compose up -d
 
       - name: Wait for services
         run: |
@@ -175,10 +175,10 @@ jobs:
         if: failure()
         run: |
           echo "=== Cognitod logs ==="
-          docker-compose logs cognitod
+          docker compose logs cognitod
           echo "=== LLM logs ==="
-          docker-compose logs llama-server
+          docker compose logs llama-server
 
       - name: Cleanup
         if: always()
-        run: docker-compose down -v
+        run: docker compose down -v
