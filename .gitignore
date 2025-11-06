@@ -132,6 +132,8 @@ RELEASE_NOTES_*.md
 
 # Internal documentation directory (most content is internal/proprietary)
 docs/
+# BUT keep public images
+!docs/images/
 
 # Environment files with secrets
 .env
@@ -150,3 +152,10 @@ notebooks/
 # Model files (download separately)
 models/*.gguf
 models/*.bin
+LAUNCH_PLAN.md
+linnix-demo.cast
+scripts/convert_demo_to_gif.sh
+scripts/demo_sequence.sh
+scripts/quick_demo_gif.sh
+scripts/record_demo_terminalizer.sh
+scripts/record_demo.sh

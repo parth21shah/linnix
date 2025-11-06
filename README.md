@@ -1,9 +1,14 @@
 # Linnix
 
+[![CI](https://github.com/linnix-os/linnix/actions/workflows/docker.yml/badge.svg)](https://github.com/linnix-os/linnix/actions/workflows/docker.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Docker Pulls](https://img.shields.io/docker/pulls/linnixos/cognitod?style=flat-square)](https://github.com/linnix-os/linnix/pkgs/container/cognitod)
 [![Release](https://img.shields.io/github/v/release/linnix-os/linnix?style=flat-square)](https://github.com/linnix-os/linnix/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/linnix-os/linnix?style=social)](https://github.com/linnix-os/linnix)
+
+<p align="center">
+  <img src="docs/images/linnix-demo.gif" alt="Linnix detecting and analyzing a fork storm in real-time" width="800"/>
+</p>
 
 **eBPF-powered Linux observability with AI incident detection**
 
@@ -15,11 +20,28 @@ Linnix captures every process fork, exec, and exit with lightweight CPU/memory t
 
 ## 🎯 Why Linnix?
 
-- **⚡ Zero Overhead**: <1% CPU usage with eBPF probes
-- **🧠 AI-Powered**: LLM-based incident detection and classification
-- **💰 Cost-Effective**: 60-80% cheaper than Datadog or Dynatrace
-- **🔓 Open Source**: Apache-2.0 license, run anywhere
-- **🚀 Production-Ready**: Battle-tested on multi-node clusters
+**Traditional monitoring tells you "CPU is high". Linnix tells you WHY and WHAT TO DO.**
+
+- **⚡ Zero Overhead**: <1% CPU usage with eBPF probes (vs 5-15% for traditional agents)
+- **🧠 AI-Powered**: Natural language insights - "Fork storm in cron job. Add rate limit to /etc/cron.d/backup"
+- **💰 Cost-Effective**: 60-80% cheaper than Datadog or Dynatrace, runs on your infrastructure
+- **🔓 Open Source**: Apache-2.0 license, no vendor lock-in, BYO LLM
+- **🚀 Production-Ready**: Battle-tested on multi-node clusters, kernel 5.8+
+
+### 📊 How We Compare
+
+| Feature | Linnix (OSS) | Prometheus + Grafana | Datadog | Elastic APM |
+|---------|-------------|---------------------|---------|-------------|
+| **Setup Time** | 5 minutes | 2-3 hours | 30 minutes | 1-2 hours |
+| **CPU Overhead** | <1% (eBPF) | 2-5% (exporters) | 5-15% (agent) | 10-20% (APM) |
+| **Instrumentation** | Zero | Manual exporters | Agent install | Code changes |
+| **AI Insights** | ✅ Built-in | ❌ No | ⚠️ Paid add-on | ❌ No |
+| **Incident Detection** | ✅ Auto | ⚠️ Manual rules | ✅ ML (paid) | ⚠️ Manual alerts |
+| **Cost (10 nodes)** | **$0** | ~$50/mo hosting | ~$1,500/mo | ~$1,000/mo |
+| **Data Privacy** | ✅ Your infra | ✅ Your infra | ❌ Vendor cloud | ⚠️ Self-host option |
+| **BYO LLM** | ✅ Any model | N/A | ❌ No | ❌ No |
+
+**Bottom line**: We're Prometheus for process lifecycle + AI reasoning layer. Use both!
 
 ## ⚡ 5-Minute Quickstart
 
