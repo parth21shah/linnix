@@ -158,6 +158,7 @@ notebooks/
 models/*.gguf
 models/*.bin
 LAUNCH_PLAN.md
+LAUNCH_ANNOUNCEMENT.md
 linnix-demo.cast
 scripts/convert_demo_to_gif.sh
 scripts/demo_sequence.sh
@@ -167,3 +168,13 @@ scripts/record_demo.sh
 scripts/generate_architecture_diagram.py
 scripts/generate_logo.py
 scripts/generate_og_image.py
+
+# YouTube video creation files
+videos/
+scripts/generate_youtube_thumbnail.py
+scripts/record_demo_video.sh
+scripts/demo_video_sequence.sh
+scripts/convert_demo_to_mp4.sh
+scripts/youtube_description.txt
+docs/VIDEO_CREATION_GUIDE.md
+docs/GITHUB_SETUP.md
