@@ -238,10 +238,10 @@ docker rmi linnixos/cognitod:latest linnixos/llama-cpp:latest
 ## Next Steps
 
 1. **Install CLI**: `cargo install --path linnix-cli`
-2. **Read Docs**: [docs.linnix.io](https://docs.linnix.io)
-3. **Join Discord**: [discord.gg/linnix](https://discord.gg/linnix)
-4. **Deploy to K8s**: See [Kubernetes guide](docs/kubernetes.md)
-5. **Integrate Alerts**: See [Slack/PagerDuty setup](docs/alerting.md)
+2. **Read Docs**: [github.com/linnix-os/linnix/tree/main/docs](https://github.com/linnix-os/linnix/tree/main/docs)
+3. **Join Discord**: [github.com/linnix-os/linnix/discussions](https://github.com/linnix-os/linnix/discussions)
+4. **Deploy to K8s**: See Kubernetes guide (coming soon)
+5. **Integrate Alerts**: See Alerting setup (coming soon)
 
 ## Architecture
 
@@ -313,4 +313,4 @@ Apache-2.0 (open source) | Commercial license available for Enterprise
 
 ---
 
-**Need help?** Open an [issue](https://github.com/linnix-os/linnix/issues) or ask in [Discord](https://discord.gg/linnix)
+**Need help?** Open an [issue](https://github.com/linnix-os/linnix/issues) or ask in [Discord](https://github.com/linnix-os/linnix/discussions)

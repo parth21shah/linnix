@@ -16,7 +16,7 @@ Linnix captures every process fork, exec, and exit with lightweight CPU/memory t
 
 > **✨ NEW**: **linnix-3b model now available!** Download the 2.1GB quantized model from [Releases](https://github.com/linnix-os/linnix/releases/tag/v0.1.0) or use the automated setup script.
 
-> **Note**: This is the open-source version with full eBPF monitoring and AI-powered incident detection. For custom model training, enterprise support, and advanced features, see [Linnix Enterprise](https://linnix.io/enterprise).
+> **Note**: This is the open-source version with full eBPF monitoring and AI-powered incident detection. For custom model training, enterprise support, and advanced features, see [Linnix Enterprise](#enterprise-features).
 
 ## 🎯 Why Linnix?
 
@@ -100,7 +100,7 @@ curl -N http://localhost:3000/stream
 
 ```bash
 # 1. Install cognitod
-curl -sfL https://linnix.io/install.sh | sh
+curl -sfL https://raw.githubusercontent.com/linnix-os/linnix/main/scripts/install.sh | sh
 
 # 2. Start monitoring
 sudo systemctl start cognitod
@@ -159,7 +159,7 @@ linnix-reasoner --insights
 | SSO/RBAC | ❌ | ✅ |
 | 24/7 support | ❌ | ✅ |
 
-[Learn more about Enterprise →](https://linnix.io/pricing)
+[Learn more about Enterprise →](#enterprise-features)
 
 ## 🚀 Installation
 
@@ -221,7 +221,7 @@ sudo cp target/release/linnix-reasoner /usr/local/bin/
 - [HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) - eBPF probes, BTF offsets, and AI loop internals
 - [FAQ.md](docs/FAQ.md) - Kernel support, overhead, and privacy answers
 
-Full documentation: [docs.linnix.io](https://docs.linnix.io)
+Full documentation: [GitHub docs/](https://github.com/linnix-os/linnix/tree/main/docs)
 
 ## 🔌 API Endpoints
 
@@ -286,7 +286,7 @@ linnix-reasoner --insights
 
 You can also use commercial APIs (OpenAI, Anthropic, etc.) by pointing to their endpoints.
 
-> **Enterprise**: Get custom-trained models fine-tuned on your specific workloads. [Contact sales](https://linnix.io/enterprise) for details.
+> **Enterprise**: Get custom-trained models fine-tuned on your specific workloads. [Contact sales](#enterprise-features) for details.
 
 ## 🔧 Configuration
 
@@ -431,14 +431,16 @@ If you find Linnix useful, please star the repo! It helps us grow the community.
 
 ## 💬 Community
 
-- **Discord**: [Join our server](https://discord.gg/linnix) (coming soon)
-- **Twitter**: [@linnixhq](https://twitter.com/linnixhq)
-- **Blog**: [blog.linnix.io](https://blog.linnix.io)
+- **Discord**: Discord (coming soon) (coming soon)
+- **Twitter**: [@linnix_os](https://twitter.com/linnix_os)
+- **Blog**: [github.com/linnix-os/linnix/discussions](https://github.com/linnix-os/linnix/discussions)
 - **Discussions**: [GitHub Discussions](https://github.com/linnix-os/linnix/discussions)
+
+<a id="enterprise-features"></a>
 
 ## 🏢 Enterprise
 
-Need custom training, SSO, or 24/7 support? Check out [Linnix Enterprise](https://linnix.io/pricing).
+Need custom training, SSO, or 24/7 support? Check out [Linnix Enterprise](#enterprise-features).
 
 Features:
 - Custom LLM training on your incidents
@@ -449,7 +451,7 @@ Features:
 - Service-level agreements
 - Dedicated support engineer
 
-Contact: sales@linnix.io
+Contact: Open an [issue](https://github.com/linnix-os/linnix/issues/new?labels=enterprise) for enterprise inquiries
 
 ## � Show Your Support
 
@@ -489,4 +491,4 @@ If you use Linnix in research, please cite:
 
 **Made with ❤️ by the Linnix team**
 
-[Website](https://linnix.io) • [Docs](https://docs.linnix.io) • [Blog](https://blog.linnix.io) • [Twitter](https://twitter.com/linnixhq)
+[GitHub](https://github.com/linnix-os/linnix) • [Docs](https://github.com/linnix-os/linnix/tree/main/docs) • [Blog](https://github.com/linnix-os/linnix/discussions) • [Twitter](https://twitter.com/linnix_os)
