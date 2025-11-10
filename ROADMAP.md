@@ -94,41 +94,18 @@ services:
 
 ---
 
-### 3. **Pre-built Docker Images** ⭐⭐⭐⭐
+### 3. **Pre-built Docker Images** ✅ DONE
 **Priority**: HIGH  
 **Effort**: 3 days  
-**Impact**: Eliminates Rust toolchain requirement
+**Status**: Docker images available on GHCR (ghcr.io/linnix-os/cognitod)
 
 **Problem**: Users must build from source (cargo build takes 10+ min on slow machines)  
-**Solution**: Publish to Docker Hub + GitHub Container Registry
+**Solution**: ✅ Published to GitHub Container Registry
 
-**Images**:
-- `linnixos/cognitod:latest` (multi-arch: amd64, arm64)
-- `linnixos/cognitod:v0.1.0` (tagged releases)
-- `linnixos/cognitod:nightly` (bleeding edge)
-- `linnixos/linnix-cli:latest` (CLI tools)
-- `linnixos/llama-cpp:latest` (with demo model pre-loaded)
-
-**Build Pipeline** (GitHub Actions):
-```yaml
-on:
-  push:
-    tags: ['v*']
-  
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: docker/build-push-action@v5
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: linnixos/cognitod:latest
-```
-
-**Success Metrics**:
-- Docker Hub pulls >1000/month
-- Zero "build failed" GitHub issues
+**Available Images**:
+- `ghcr.io/linnix-os/cognitod:latest` - eBPF monitoring daemon
+- Multi-arch support (amd64, arm64)
+- No Rust toolchain needed for users
 
 ---
 
