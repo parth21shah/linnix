@@ -16,8 +16,6 @@ Linnix captures every process fork, exec, and exit with lightweight CPU/memory t
 
 > **✨ NEW**: **linnix-3b model now available!** Download the 2.1GB quantized model from [Releases](https://github.com/linnix-os/linnix/releases/tag/v0.1.0) or use the automated setup script.
 
-> **Note**: This is the open-source version with full eBPF monitoring and AI-powered incident detection. For custom model training, enterprise support, and advanced features, see [Linnix Enterprise](#enterprise-features).
-
 ## 🎯 Why Linnix?
 
 **Traditional monitoring tells you "CPU is high". Linnix tells you WHY and WHAT TO DO.**
@@ -42,8 +40,6 @@ Linnix captures every process fork, exec, and exit with lightweight CPU/memory t
 | **BYO LLM** | ✅ Any model | N/A | ❌ No | ❌ No |
 
 **Bottom line**: We're Prometheus for process lifecycle + AI reasoning layer. Use both!
-
-## ⚡ 5-Minute Quickstart
 
 ### 🎯 **One-Command Setup (New!)**
 
@@ -143,23 +139,16 @@ linnix-reasoner --insights
 
 ## 📊 Features
 
-| Feature | Community (Free) | Enterprise |
-|---------|-----------------|------------|
-| eBPF monitoring | ✅ | ✅ |
-| Real-time event streaming | ✅ | ✅ |
-| Process tree tracking | ✅ | ✅ |
-| CPU/memory telemetry | ✅ | ✅ |
-| Local rules engine | ✅ | ✅ |
-| Prometheus integration | ✅ | ✅ |
-| LLM inference (BYO model) | ✅ | ✅ |
-| 50 training examples | ✅ | ✅ |
-| Custom model training platform | ❌ | ✅ |
-| 500+ training records | ❌ | ✅ |
-| Dataset expansion tools | ❌ | ✅ |
-| SSO/RBAC | ❌ | ✅ |
-| 24/7 support | ❌ | ✅ |
+Linnix provides comprehensive eBPF-based monitoring with AI-powered incident detection:
 
-[Learn more about Enterprise →](#enterprise-features)
+- ✅ **eBPF monitoring** - Kernel-level process lifecycle tracking
+- ✅ **Real-time event streaming** - SSE endpoints for live data
+- ✅ **Process tree tracking** - Full ancestry and lineage graphs  
+- ✅ **CPU/memory telemetry** - Lightweight resource monitoring
+- ✅ **Local rules engine** - Customizable incident patterns
+- ✅ **Prometheus integration** - Standard metrics export
+- ✅ **LLM inference** - Bring your own model (OpenAI, local, etc.)
+- ✅ **Training examples** - 50+ curated incident samples included
 
 ## 🚀 Installation
 
@@ -285,8 +274,6 @@ linnix-reasoner --insights
 ```
 
 You can also use commercial APIs (OpenAI, Anthropic, etc.) by pointing to their endpoints.
-
-> **Enterprise**: Get custom-trained models fine-tuned on your specific workloads. [Contact sales](#enterprise-features) for details.
 
 ## 🔧 Configuration
 
@@ -435,24 +422,6 @@ If you find Linnix useful, please star the repo! It helps us grow the community.
 - **Twitter**: [@linnix_os](https://twitter.com/linnix_os)
 - **Blog**: [github.com/linnix-os/linnix/discussions](https://github.com/linnix-os/linnix/discussions)
 - **Discussions**: [GitHub Discussions](https://github.com/linnix-os/linnix/discussions)
-
-<a id="enterprise-features"></a>
-
-## 🏢 Enterprise
-
-Need custom training, SSO, or 24/7 support? Check out [Linnix Enterprise](#enterprise-features).
-
-Features:
-- Custom LLM training on your incidents
-- 500+ curated training records
-- Dataset expansion tools
-- Multi-tenancy
-- SSO/RBAC
-- Service-level agreements
-- Dedicated support engineer
-
-Contact: Open an [issue](https://github.com/linnix-os/linnix/issues/new?labels=enterprise) for enterprise inquiries
-
 ## � Show Your Support
 
 If Linnix helps you catch production incidents, add this badge to your README:

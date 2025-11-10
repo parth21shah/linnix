@@ -309,7 +309,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup.
 
 ## License
 
-Apache-2.0 (open source) | Commercial license available for Enterprise
+Apache-2.0 (open source)
 
 ---
 

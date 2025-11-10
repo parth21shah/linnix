@@ -62,7 +62,6 @@ command:
 |-------|------|----------------|----------|----------|
 | TinyLlama 1.1B | 747 MB | ~50 tokens/sec | Good | Testing, development |
 | Linnix 3B | 2.1 GB | ~30 tokens/sec | Excellent | Production use |
-| Linnix 7B (future) | 4.5 GB | ~15 tokens/sec | Best | Enterprise, complex incidents |
 
 *Benchmarks on 8-core CPU, no GPU*
 
@@ -77,11 +76,6 @@ command:
 - RAM: 4 GB
 - CPU: 4 cores
 - Disk: 3 GB
-
-### Enterprise (Linnix 7B)
-- RAM: 8 GB
-- CPU: 8 cores (or GPU)
-- Disk: 6 GB
 
 ## Troubleshooting
 
