@@ -179,6 +179,7 @@ scripts/convert_demo_to_mp4.sh
 scripts/youtube_description.txt
 docs/VIDEO_CREATION_GUIDE.md
 docs/GITHUB_SETUP.md
+docs/SHOW_HN_POST.md
 README.md.backup
 BROKEN_LINKS_REPORT.md
 scripts/fix_broken_links.sh
