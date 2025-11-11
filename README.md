@@ -84,7 +84,7 @@ This downloads a small model (linnix-3b, distilled for CPU inference) and starts
 
 ## What it catches
 
-- Memory leaks (caught one in a backup script)
+- Memory leaks 
 - Fork storms (cron job gone wrong)
 - File descriptor exhaustion (before the service crashed)
 - CPU thrashing (process stuck in a loop)
