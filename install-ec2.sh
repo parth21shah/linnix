@@ -197,11 +197,15 @@ install_rust() {
     if [ -n "$SUDO_USER" ]; then
         sudo -u "$SUDO_USER" bash -c "
             export PATH=\"/home/$SUDO_USER/.cargo/bin:\$PATH\"
+            . \"/home/$SUDO_USER/.cargo/env\"
+            rustup default stable
             rustup install nightly-2024-12-10
             rustup component add rust-src --toolchain nightly-2024-12-10
             cargo install bpf-linker --version 0.9.13 --locked
         "
     else
+        . "$HOME/.cargo/env"
+        rustup default stable
         rustup install nightly-2024-12-10
         rustup component add rust-src --toolchain nightly-2024-12-10
         cargo install bpf-linker --version 0.9.13 --locked
@@ -221,11 +225,13 @@ install_linnix_binaries() {
         # Build from source
         log info "Building from source..."
 
-        # Ensure cargo is in PATH
+        # Ensure cargo is in PATH and environment is loaded
         if [ -n "$SUDO_USER" ]; then
             export PATH="/home/$SUDO_USER/.cargo/bin:$PATH"
+            [ -f "/home/$SUDO_USER/.cargo/env" ] && . "/home/$SUDO_USER/.cargo/env"
         else
             export PATH="$HOME/.cargo/bin:$PATH"
+            [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
         fi
 
         TEMP_DIR=$(mktemp -d)
