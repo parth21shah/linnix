@@ -133,6 +133,7 @@ install_dependencies() {
                     build-essential \
                     pkg-config \
                     libelf-dev \
+                    libssl-dev \
                     clang \
                     llvm \
                     git
@@ -153,6 +154,7 @@ install_dependencies() {
                     make \
                     pkgconfig \
                     elfutils-libelf-devel \
+                    openssl-devel \
                     clang \
                     llvm \
                     git
