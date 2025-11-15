@@ -221,6 +221,13 @@ install_linnix_binaries() {
         # Build from source
         log info "Building from source..."
 
+        # Ensure cargo is in PATH
+        if [ -n "$SUDO_USER" ]; then
+            export PATH="/home/$SUDO_USER/.cargo/bin:$PATH"
+        else
+            export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+
         TEMP_DIR=$(mktemp -d)
         cd "$TEMP_DIR"
 
