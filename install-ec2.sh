@@ -384,7 +384,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${INSTALL_DIR}/cognitod
+ExecStart=${INSTALL_DIR}/cognitod --config ${CONFIG_DIR}/linnix.toml
 Restart=on-failure
 RestartSec=5s
 

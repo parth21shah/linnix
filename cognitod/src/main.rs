@@ -925,8 +925,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let api = all_routes(app_state.clone());
-    let listener = TcpListener::bind("127.0.0.1:3000").await?;
-    println!("[cognitod] HTTP server on http://127.0.0.1:3000");
+    let listen_addr = "0.0.0.0:3000";
+    let listener = TcpListener::bind(listen_addr).await?;
+    println!("[cognitod] HTTP server on http://{}", listen_addr);
     tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, api).await {
             eprintln!("server error: {e}");
