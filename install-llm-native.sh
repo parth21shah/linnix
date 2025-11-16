@@ -103,21 +103,35 @@ else
     cd "$LLAMA_DIR"
 fi
 
-# Build with optimizations for server deployment
+# Build with CMake (llama.cpp switched from Makefile to CMake)
 # Use all available CPU cores
 NPROC=$(nproc)
-print_info "Building with $NPROC CPU cores..."
+print_info "Building with $NPROC CPU cores using CMake..."
 
 # Clean previous build
-make clean 2>/dev/null || true
+rm -rf build 2>/dev/null || true
 
-# Build server binary with optimizations
-make -j"$NPROC" llama-server
+# Create build directory and configure with CMake
+mkdir -p build
+cd build
 
-if [ ! -f "$LLAMA_DIR/llama-server" ]; then
+# Configure CMake with optimizations
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLAMA_BUILD_SERVER=ON \
+    -DLLAMA_NATIVE=ON
+
+# Build server binary
+cmake --build . --config Release --target llama-server -j"$NPROC"
+
+if [ ! -f "$LLAMA_DIR/build/bin/llama-server" ]; then
     print_error "llama-server build failed"
     exit 1
 fi
+
+# Copy binary to main llama.cpp directory for easier access
+cp "$LLAMA_DIR/build/bin/llama-server" "$LLAMA_DIR/llama-server"
+
 print_step "llama.cpp built successfully"
 
 # Create directories
