@@ -930,11 +930,11 @@
             // Connect to event stream
             connectEventStream();
             
-            // Set up periodic updates
-            setInterval(checkServiceHealth, 10000);  // Every 10 seconds
-            setInterval(loadSystemData, 5000);       // Every 5 seconds
-            setInterval(loadProcesses, 10000);       // Every 10 seconds
-            setInterval(loadInsights, 30000);        // Every 30 seconds
+            // Set up periodic updates (optimized for performance)
+            setInterval(checkServiceHealth, 30000);  // Every 30 seconds
+            setInterval(loadSystemData, 15000);      // Every 15 seconds
+            setInterval(loadProcesses, 20000);       // Every 20 seconds
+            setInterval(loadInsights, 60000);        // Every 60 seconds
         }
         
         // Start when page loads
