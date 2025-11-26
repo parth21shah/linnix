@@ -1,6 +1,6 @@
 [package]
 name = "linnix-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Parth Shah <parth21.shah@gmail.com>"]
 description = "CLI tool for consuming process events from Linnix backend via SSE"
