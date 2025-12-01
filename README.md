@@ -1,25 +1,26 @@
 # Linnix
 
-**AI-Assisted Incident Triage for Kubernetes & Linux**
+**Find which process is hurting your SLOs — not just who's using CPU, but who's causing stalls.**
 
 [![CI](https://github.com/linnix-os/linnix/actions/workflows/docker.yml/badge.svg)](https://github.com/linnix-os/linnix/actions/workflows/docker.yml)
 [![License](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/linnixos/cognitod?style=flat-square)](https://github.com/linnix-os/linnix/pkgs/container/cognitod)
 
 ---
 
-## "Why is this node slow?"
+## The Problem
 
-Linnix answers the hardest question in platform engineering. It uses **eBPF** to monitor Linux kernel events and an **AI Engine** to explain *exactly* what is causing system instability.
+`top` shows 80% CPU. Prometheus shows high latency. But *which pod* is actually stalling your payment service?
 
-**Stop guessing.** Linnix automatically detects and explains:
-*   **Noisy Neighbors**: Which container is starving others of CPU?
-*   **Fork Bombs**: Rapid process creation storms.
-*   **Memory Leaks**: Gradual RSS growth patterns.
-*   **PSI Saturation**: CPU/IO/Memory stalls that don't show up in top.
+Linnix uses **eBPF** + **PSI (Pressure Stall Information)** to answer this. PSI measures actual stall time — not usage, but contention. A pod using 40% CPU with 60% PSI is worse than one using 100% CPU with 5% PSI.
+
+**What Linnix detects:**
+- **Noisy Neighbors**: Which container is starving others
+- **Fork Storms**: Runaway process creation before it crashes the node
+- **Stall Attribution**: "Pod X caused 300ms stall to Pod Y"
+- **PSI Saturation**: CPU/IO/Memory pressure that doesn't show in `top`
 
 > [!IMPORTANT]
-> **Safety First:** Linnix runs in **Monitor Mode** by default. It detects issues and proposes solutions, but **never** takes action without human approval.
+> **Monitor-only by default.** Linnix detects and reports — it never takes action without explicit configuration.
 
 ### 🔒 Security & Privacy
 
@@ -87,9 +88,31 @@ See [SAFETY.md](SAFETY.md) for our detailed safety model.
 
 ---
 
+## Kubernetes Features
+
+Linnix has first-class Kubernetes support:
+
+- **Pod Attribution**: Every process event is tagged with `pod_name`, `namespace`, `container_id`
+- **Namespace Awareness**: Filter and query by namespace
+- **PSI Contribution Tracking**: See which pod contributed to system-wide PSI pressure
+- **cgroup Integration**: Maps processes to their cgroups for container-level aggregation
+
+```bash
+# Example: Get processes causing stalls in the payments namespace
+curl "http://localhost:3000/processes?namespace=payments&sort=psi_contribution"
+```
+
+---
+
+## Early Adopters
+
+This project is under active development. If you're using it or evaluating it, open an issue or email parth21.shah@gmail.com.
+
+---
+
 ## License
 
 *   **Agent (`cognitod`)**: AGPL-3.0
 *   **eBPF Collector**: GPL-2.0 or MIT (eBPF programs must be GPL-compatible for kernel loading)
 
-See [LICENSE_FAQ.md](LICENSE_FAQ.md) for details.
+Commercial licensing available for teams that can't use AGPL. See [LICENSE_FAQ.md](LICENSE_FAQ.md) for details.
