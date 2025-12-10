@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Mutex, time::Duration};
+use std::{collections::VecDeque, sync::Arc, sync::Mutex, time::Duration};
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::ProcessEvent;
+use crate::k8s::{K8sContext, K8sMetadata};
 use crate::types::SystemSnapshot;
 use crate::utils::psi::PsiMetrics;
 
@@ -17,15 +18,22 @@ use sysinfo::{
     System,   // system handle
 };
 
+pub type ProcessEntry = (ProcessEvent, Option<Arc<K8sMetadata>>);
+
+pub type ProcessHistoryEntry = (u64, ProcessEvent, Option<Arc<K8sMetadata>>);
+
 pub struct ContextStore {
-    inner: Mutex<VecDeque<(u64, ProcessEvent)>>,
-    live: Mutex<HashMap<u32, ProcessEvent>>,
+    // Store timestamp, event, and optional cached metadata
+    inner: Mutex<VecDeque<ProcessHistoryEntry>>,
+    // Store live process state and cached metadata
+    live: Mutex<HashMap<u32, ProcessEntry>>,
     max_age: Duration,
     max_len: usize,
     broadcaster: broadcast::Sender<ProcessEvent>,
     seq: AtomicU64,
     system_snapshot: Mutex<SystemSnapshot>,
     sys: Mutex<System>,
+    k8s_ctx: Option<Arc<K8sContext>>,
 }
 
 #[derive(Clone, Debug)]
@@ -36,7 +44,7 @@ pub struct ProcessMemorySummary {
 }
 
 impl ContextStore {
-    pub fn new(max_age: Duration, max_len: usize) -> Self {
+    pub fn new(max_age: Duration, max_len: usize, k8s_ctx: Option<Arc<K8sContext>>) -> Self {
         let (broadcaster, _) = broadcast::channel(1024);
         Self {
             inner: Mutex::new(VecDeque::new()),
@@ -61,10 +69,11 @@ impl ContextStore {
                 psi_io_full_avg10: 0.0,
             }),
             sys: Mutex::new(System::new_all()),
+            k8s_ctx,
         }
     }
 
-    pub fn get_live_map(&self) -> std::sync::MutexGuard<'_, HashMap<u32, ProcessEvent>> {
+    pub fn get_live_map(&self) -> std::sync::MutexGuard<'_, HashMap<u32, ProcessEntry>> {
         self.live.lock().unwrap()
     }
 
@@ -74,9 +83,64 @@ impl ContextStore {
             .unwrap_or_default()
             .as_nanos() as u64;
 
+        // Try to fetch or inherit metadata
+        let mut metadata: Option<Arc<K8sMetadata>> = None;
+
+        if let Some(ctx) = &self.k8s_ctx {
+            match event.event_type {
+                0 | 1 => {
+                    // Exec or Fork: try to get fresh metadata
+                    if let Some(meta) = ctx.get_metadata_for_pid(event.pid) {
+                        metadata = Some(Arc::new(meta));
+                    } else if event.event_type == 1 {
+                        // Fork fallback: inherit parent's metadata if we can't find child's yet
+                        // (race condition: process created but cgroup not yet populated)
+                        let live = self.live.lock().unwrap();
+                        if let Some((_, parent_meta)) = live.get(&event.ppid) {
+                            metadata = parent_meta.clone();
+                        }
+                    }
+                }
+                2 => {
+                    // Exit: check if we have it in live map
+                    let live = self.live.lock().unwrap();
+                    if let Some((_, meta)) = live.get(&event.pid) {
+                        metadata = meta.clone();
+                    }
+                }
+                _ => {
+                    // Other events: try to lookup in live map first
+                    let live = self.live.lock().unwrap();
+                    if let Some((_, meta)) = live.get(&event.pid) {
+                        metadata = meta.clone();
+                    }
+                }
+            }
+        }
+
+        // Timestamp fix for Exit events: use start time from live map
+        if event.event_type == 2 {
+            let live = self.live.lock().unwrap();
+            if let Some((proc, _)) = live.get(&event.pid) {
+                // The Exit event currently has ts_ns = exit time.
+                // We want ts_ns = start time (from live map) and exit_time_ns = exit time.
+                event.exit_time_ns = event.ts_ns;
+                event.ts_ns = proc.ts_ns;
+            }
+        }
+
+        // If we still don't have metadata (e.g. late discovery), try one last check for non-exit
+        if metadata.is_none()
+            && event.event_type != 2
+            && let Some(ctx) = &self.k8s_ctx
+            && let Some(meta) = ctx.get_metadata_for_pid(event.pid)
+        {
+            metadata = Some(Arc::new(meta));
+        }
+
         {
             let mut queue = self.inner.lock().unwrap();
-            queue.push_back((now, event.clone()));
+            queue.push_back((now, event.clone(), metadata.clone()));
             Self::prune_locked(&mut queue, self.max_age, self.max_len);
         }
 
@@ -86,26 +150,27 @@ impl ContextStore {
                 0 => {
                     // Exec
                     event.set_exit_time(None);
-                    live.insert(event.pid, event.clone());
+                    live.insert(event.pid, (event.clone(), metadata));
                 }
                 1 => {
                     // Fork
                     event.set_exit_time(None);
-                    live.entry(event.pid).or_insert_with(|| event.clone());
+                    live.entry(event.pid)
+                        .or_insert_with(|| (event.clone(), metadata));
                 }
                 2 => {
-                    if let Some(proc) = live.get_mut(&event.pid) {
+                    if let Some((proc, _)) = live.get_mut(&event.pid) {
                         proc.set_exit_time(Some(now));
                         proc.event_type = 2;
                     } else {
                         event.set_exit_time(Some(now));
-                        live.insert(event.pid, event.clone());
+                        live.insert(event.pid, (event.clone(), metadata));
                     }
                 }
                 _ => {}
             }
 
-            live.retain(|_, proc| {
+            live.retain(|_, (proc, _)| {
                 proc.event_type != 2
                     || proc
                         .exit_time()
@@ -125,17 +190,17 @@ impl ContextStore {
         let queue = self.inner.lock().unwrap();
         queue
             .iter()
-            .filter(|(t, _)| now - *t <= self.max_age.as_nanos() as u64)
-            .map(|(_, e)| e.clone())
+            .filter(|(t, _, _)| now - *t <= self.max_age.as_nanos() as u64)
+            .map(|(_, e, _)| e.clone())
             .collect()
     }
 
-    fn prune_locked(queue: &mut VecDeque<(u64, ProcessEvent)>, max_age: Duration, max_len: usize) {
+    fn prune_locked(queue: &mut VecDeque<ProcessHistoryEntry>, max_age: Duration, max_len: usize) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        while queue.front().is_some_and(|(_, e)| {
+        while queue.front().is_some_and(|(_, e, _)| {
             e.event_type == 2
                 && e.exit_time()
                     .is_some_and(|et| now - et > max_age.as_nanos() as u64)
@@ -154,12 +219,12 @@ impl ContextStore {
 
     pub fn live_snapshot(&self) -> Vec<ProcessEvent> {
         let live = self.get_live_map();
-        live.values().cloned().collect()
+        live.values().map(|(e, _)| e.clone()).collect()
     }
 
     pub fn get_process_by_pid(&self, pid: u32) -> Option<ProcessEvent> {
         let live = self.get_live_map();
-        live.get(&pid).cloned()
+        live.get(&pid).map(|(e, _)| e.clone())
     }
 
     pub fn broadcaster(&self) -> broadcast::Sender<ProcessEvent> {
@@ -187,7 +252,7 @@ impl ContextStore {
         let live = self.get_live_map();
         let mut entries: Vec<ProcessMemorySummary> = live
             .values()
-            .filter_map(|proc| {
+            .filter_map(|(proc, _)| {
                 let mem = proc.mem_percent()?;
                 if mem <= 0.0 {
                     return None;
@@ -229,7 +294,7 @@ impl ContextStore {
         let live = self.get_live_map();
         let mut entries: Vec<ProcessMemorySummary> = live
             .values()
-            .filter_map(|proc| {
+            .filter_map(|(proc, _)| {
                 let cpu = proc.cpu_percent()?;
                 if cpu <= 0.0 {
                     return None;
@@ -326,7 +391,7 @@ impl ContextStore {
         sys.refresh_all();
 
         let mut live = self.get_live_map();
-        for event in live.values_mut() {
+        for (event, _) in live.values_mut() {
             if let Some(proc) = sys.process(Pid::from_u32(event.pid)) {
                 event.set_cpu_percent(Some(proc.cpu_usage()));
                 let mem_pct = if sys.total_memory() > 0 {
@@ -371,6 +436,54 @@ impl ContextStore {
         }
         entries
     }
+
+    /// Get pod activity stats within a time window
+    /// Get pod activity stats within a time window
+    pub fn get_pod_activity_window(
+        &self,
+        window: Duration,
+    ) -> (HashMap<String, u64>, HashMap<String, u64>) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let cutoff = now.saturating_sub(window.as_nanos() as u64);
+
+        let mut fork_counts: HashMap<String, u64> = HashMap::new();
+        let mut short_job_counts: HashMap<String, u64> = HashMap::new();
+
+        let queue = self.inner.lock().unwrap();
+
+        // Scan history for relevant events
+        for (ts, event, meta_opt) in queue.iter() {
+            if *ts < cutoff {
+                continue;
+            }
+
+            // Use the metadata cached at time of event
+            if let Some(meta) = meta_opt {
+                let key = format!("{}/{}", meta.namespace, meta.pod_name);
+
+                // Count forks
+                if event.event_type == 1 {
+                    *fork_counts.entry(key.clone()).or_default() += 1;
+                }
+
+                // Count short jobs (exit event with lifetime < 1s)
+                // Count short jobs (exit event with lifetime < 1s)
+                if event.event_type == 2
+                    && let Some(exit_time) = event.exit_time()
+                {
+                    let lifetime_ns = exit_time.saturating_sub(event.ts_ns);
+                    if lifetime_ns < 1_000_000_000 {
+                        *short_job_counts.entry(key).or_default() += 1;
+                    }
+                }
+            }
+        }
+
+        (fork_counts, short_job_counts)
+    }
 }
 
 #[cfg(test)]
@@ -404,7 +517,7 @@ mod tests {
 
     #[test]
     fn exec_followed_by_exit_sets_exit_timestamp() {
-        let store = ContextStore::new(Duration::from_secs(10), 128);
+        let store = ContextStore::new(Duration::from_secs(10), 128, None);
         let exec = sample_event(42, 1, EventType::Exec);
         store.add(exec);
 
@@ -430,7 +543,7 @@ mod tests {
 
     #[test]
     fn lone_exit_backfills_record() {
-        let store = ContextStore::new(Duration::from_secs(10), 128);
+        let store = ContextStore::new(Duration::from_secs(10), 128, None);
         let exit_only = sample_event(99, 2, EventType::Exit);
         store.add(exit_only);
 
@@ -444,5 +557,40 @@ mod tests {
         assert_eq!(proc.pid, 99);
         assert_eq!(proc.event_type, EventType::Exit as u32);
         assert!(proc.exit_time().is_some());
+    }
+    #[test]
+    fn exit_uses_start_time_from_exec() {
+        let store = ContextStore::new(Duration::from_secs(10), 128, None);
+        let mut exec = sample_event(100, 1, EventType::Exec);
+        exec.ts_ns = 1_000_000_000; // Start at 1s
+        store.add(exec);
+
+        let mut exit = sample_event(100, 1, EventType::Exit);
+        exit.ts_ns = 2_500_000_000; // Exit at 2.5s
+        store.add(exit);
+
+        // Check the history queue
+        let recent = store.get_recent();
+        // search for the exit event in history (should be the last one added)
+        let exit_event = recent
+            .iter()
+            .find(|e| e.event_type == EventType::Exit as u32)
+            .expect("Exit event not found");
+
+        // The EXIT event should now have:
+        // ts_ns = 1_000_000_000 (from Exec)
+        // exit_time_ns = 2_500_000_000 (from Exit)
+        assert_eq!(
+            exit_event.ts_ns, 1_000_000_000,
+            "Exit event should use start time"
+        );
+        assert_eq!(
+            exit_event.exit_time_ns, 2_500_000_000,
+            "Exit event should record exit time"
+        );
+
+        // Duration should be 1.5s
+        let duration = exit_event.exit_time_ns - exit_event.ts_ns;
+        assert_eq!(duration, 1_500_000_000);
     }
 }

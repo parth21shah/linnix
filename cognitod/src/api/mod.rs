@@ -533,7 +533,7 @@ async fn get_graph(
     let mut nodes = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    if let Some(proc) = live.get(&pid) {
+    if let Some((proc, _)) = live.get(&pid) {
         // Add self
         nodes.push(GraphNode {
             pid: proc.pid,
@@ -554,7 +554,7 @@ async fn get_graph(
         let mut current_pid = proc.ppid;
         let mut parent_found = false;
         while current_pid != 0 && current_pid != pid && !seen.contains(&current_pid) {
-            if let Some(parent) = live.get(&current_pid) {
+            if let Some((parent, _)) = live.get(&current_pid) {
                 nodes.push(GraphNode {
                     pid: parent.pid,
                     ppid: parent.ppid,
@@ -590,7 +590,7 @@ async fn get_graph(
         }
 
         // Add siblings
-        for sibling in live.values() {
+        for (sibling, _) in live.values() {
             if sibling.ppid == proc.ppid && sibling.pid != pid && !seen.contains(&sibling.pid) {
                 nodes.push(GraphNode {
                     pid: sibling.pid,
@@ -611,12 +611,15 @@ async fn get_graph(
         // Add descendants
         fn collect_descendants(
             pid: u32,
-            live: &std::collections::HashMap<u32, ProcessEvent>,
+            live: &std::collections::HashMap<
+                u32,
+                (ProcessEvent, Option<Arc<cognitod::k8s::K8sMetadata>>),
+            >,
             seen: &mut std::collections::HashSet<u32>,
             nodes: &mut Vec<GraphNode>,
             level: isize,
         ) {
-            for proc in live.values() {
+            for (proc, _) in live.values() {
                 if proc.ppid == pid && seen.insert(proc.pid) {
                     nodes.push(GraphNode {
                         pid: proc.pid,
@@ -639,7 +642,7 @@ async fn get_graph(
         (StatusCode::OK, Json(GraphResponse { root: pid, nodes })).into_response()
     } else {
         // If not found as PID, but is a PPID, show virtual root and descendants
-        let has_children = live.values().any(|proc| proc.ppid == pid);
+        let has_children = live.values().any(|(proc, _)| proc.ppid == pid);
         if has_children {
             nodes.push(GraphNode {
                 pid,
@@ -655,12 +658,15 @@ async fn get_graph(
 
             fn collect_descendants(
                 pid: u32,
-                live: &std::collections::HashMap<u32, ProcessEvent>,
+                live: &std::collections::HashMap<
+                    u32,
+                    (ProcessEvent, Option<Arc<cognitod::k8s::K8sMetadata>>),
+                >,
                 seen: &mut std::collections::HashSet<u32>,
                 nodes: &mut Vec<GraphNode>,
                 level: isize,
             ) {
-                for proc in live.values() {
+                for (proc, _) in live.values() {
                     if proc.ppid == pid && seen.insert(proc.pid) {
                         nodes.push(GraphNode {
                             pid: proc.pid,
@@ -2110,7 +2116,7 @@ mod tests {
     #[tokio::test]
     async fn heartbeats_emit_every_10s() {
         tokio::time::pause();
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let _metrics = Arc::new(Metrics::new());
         let rx = ctx.broadcaster().subscribe();
 
@@ -2133,7 +2139,7 @@ mod tests {
 
     #[tokio::test]
     async fn drops_are_counted() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 100));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 100, None));
         let metrics = Arc::new(Metrics::new());
         let rx = ctx.broadcaster().subscribe();
         let metrics_clone = metrics.clone();
@@ -2178,7 +2184,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_keys_present() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
@@ -2221,7 +2227,7 @@ mod tests {
 
     #[tokio::test]
     async fn metrics_includes_probe_state() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         metrics.set_rss_probe_mode(RssProbeMode::CoreMm.metric_value());
         metrics.set_kernel_btf_available(true);
@@ -2257,7 +2263,7 @@ mod tests {
 
     #[tokio::test]
     async fn prometheus_endpoint_respects_flag() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
@@ -2290,7 +2296,7 @@ mod tests {
 
     #[tokio::test]
     async fn prometheus_endpoint_returns_metrics_when_enabled() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         metrics.events_total.fetch_add(42, Ordering::Relaxed);
         let app_state = Arc::new(AppState {
@@ -2339,7 +2345,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_auth_allows_requests() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
@@ -2372,7 +2378,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_required_when_token_set() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
@@ -2405,7 +2411,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_with_valid_bearer_token() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
@@ -2439,7 +2445,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_with_invalid_token() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
@@ -2473,7 +2479,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_with_malformed_header() {
-        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10));
+        let ctx = Arc::new(ContextStore::new(Duration::from_secs(60), 10, None));
         let metrics = Arc::new(Metrics::new());
         let app_state = Arc::new(AppState {
             context: Arc::clone(&ctx),
