@@ -379,6 +379,50 @@ fn parse_kernel_version(raw: &str) -> Option<(u32, u32)> {
     Some((major, minor))
 }
 
+/// Extract cgroup context for a process to identify the Kubernetes pod/tenant.
+/// Returns something like "kubepods-burstable-pod123abc" or "akash-deployment-xyz"
+fn get_process_cgroup_context(pid: u32) -> Option<String> {
+    let cgroup_path = format!("/proc/{}/cgroup", pid);
+    let content = std::fs::read_to_string(&cgroup_path).ok()?;
+    
+    // Parse cgroup v2 or v1 format
+    for line in content.lines() {
+        // cgroup v2: "0::/kubepods.slice/kubepods-burstable.slice/..."
+        // cgroup v1: "1:memory:/kubepods/burstable/pod..."
+        let path = line.split(':').last()?;
+        
+        // Look for Kubernetes pod paths
+        if path.contains("kubepods") || path.contains("docker") || path.contains("containerd") {
+            // Extract meaningful portion
+            let parts: Vec<&str> = path.split('/').collect();
+            
+            // Find pod UID or container ID
+            for part in parts.iter().rev() {
+                if part.starts_with("pod") || part.starts_with("cri-containerd") {
+                    // Clean up the identifier
+                    let clean = part
+                        .replace("kubepods-", "")
+                        .replace(".slice", "")
+                        .replace("cri-containerd-", "")
+                        .replace(".scope", "");
+                    if clean.len() > 8 {
+                        return Some(clean[..12.min(clean.len())].to_string());
+                    }
+                }
+            }
+            
+            // Fallback: return last meaningful segment
+            if let Some(last) = parts.iter().rev().find(|p| !p.is_empty() && p.len() > 5) {
+                let clean = last.replace(".scope", "").replace(".slice", "");
+                if clean.len() > 8 {
+                    return Some(clean[..12.min(clean.len())].to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -396,8 +440,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     ensure_environment()?;
 
-    // Load configuration
-    let config = Config::load();
+    // Load configuration from CLI-specified path
+    let config = Config::load_from(&args.config);
     let offline_guard = Arc::new(OfflineGuard::new(config.runtime.offline));
 
     // Initialize metrics and spawn background reporting tasks
@@ -656,6 +700,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Err(e) => warn!("[cognitod] failed to load rules from {}: {e}", path),
             }
+        } else if h == "docker" || h.starts_with("docker:") {
+            // Support both "docker" (uses config) and "docker:container_name" (CLI override)
+            let docker_config = if let Some(container) = h.strip_prefix("docker:") {
+                // CLI override
+                Some(handler::docker::DockerEnforcementConfig {
+                    enabled: true,
+                    default_action: handler::docker::ContainerAction::Pause,
+                    target_container: container.to_string(),
+                    trigger_patterns: vec![
+                        "fork_storm".to_string(),
+                        "oom_risk".to_string(),
+                        "cpu_spin".to_string(),
+                    ],
+                    grace_period_secs: 5,
+                    cooldown_secs: 60,
+                    max_actions_per_hour: 10,
+                    rule_actions: std::collections::HashMap::new(),
+                })
+            } else {
+                // Use config
+                config.docker_enforcement.clone()
+            };
+
+            if let Some(docker_cfg) = docker_config {
+                let enforcer = handler::docker::DockerEnforcer::new(docker_cfg);
+                handler_list.register(enforcer);
+                info!("[cognitod] Docker enforcement handler registered");
+            } else {
+                warn!("[cognitod] Docker handler requested but not configured");
+            }
         }
     }
 
@@ -683,6 +757,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "[cognitod] rules engine unavailable; failed to load {}: {e}",
                 rules_path
             ),
+        }
+    }
+
+    // Load docker enforcement from config if present
+    if let Some(docker_cfg) = config.docker_enforcement.clone() {
+        if docker_cfg.enabled {
+            let enforcer = handler::docker::DockerEnforcer::new(docker_cfg);
+            handler_list.register(enforcer);
+            info!("[cognitod] Docker enforcement handler loaded from config");
         }
     }
 
@@ -834,6 +917,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // LocalIlmHandlerRag removed (YAGNI cleanup)
 
     let handlers = Arc::new(handler_list);
+    
+    // Initialize Warmth Keeper (Pro feature)
+    if config.warmth.enabled {
+        let keeper = Arc::new(handler::warmth::WarmthKeeper::new(
+            config.warmth.idle_threshold_secs,
+            config.warmth.ping_interval_secs,
+            config.containers.clone(),
+        ));
+        info!("[cognitod] Warmth Keeper enabled (idle={} ping={} containers={})",
+            config.warmth.idle_threshold_secs,
+            config.warmth.ping_interval_secs,
+            config.containers.len()
+        );
+        keeper.start();
+        
+        // Store globally for event processing
+        runtime::WARMTH_KEEPER.set(keeper).ok();
+    }
+    
     // Pass metrics to your listener
     if !perf_buffers.is_empty() {
         start_perf_listener(
@@ -902,15 +1004,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 return;
             }
 
+            let strategy = cb_cfg.escalation_strategy.as_str();
             info!(
-                "[circuit_breaker] enabled - CPU>{}% AND PSI>{}% sustained for {}s triggers kill (mode: {})",
+                "[circuit_breaker] enabled - CPU>{}% AND PSI>{}% sustained for {}s (mode: {}, strategy: {}, panic_threshold: {}%)",
                 cb_cfg.cpu_usage_threshold,
                 cb_cfg.cpu_psi_threshold,
                 cb_cfg.grace_period_secs,
-                cb_cfg.mode
+                cb_cfg.mode,
+                strategy,
+                cb_cfg.psi_panic_threshold
             );
+            if cb_cfg.escalation_strategy == "freeze_first" {
+                info!(
+                    "[circuit_breaker] freeze_first: PSI<{}% → freeze {}s, PSI>={}% → immediate kill",
+                    cb_cfg.psi_panic_threshold,
+                    cb_cfg.freeze_duration_secs,
+                    cb_cfg.psi_panic_threshold
+                );
+            }
 
             let mut breach_started_at: Option<std::time::Instant> = None;
+            // Track frozen processes: (pid, comm, frozen_at)
+            let mut frozen_processes: Vec<(u32, String, std::time::Instant)> = Vec::new();
 
             loop {
                 let snapshot = ctx_clone.get_system_snapshot();
@@ -952,17 +1067,64 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             }
 
                             if let Some(proc) = top_cpu_procs.first() {
+                                // Get cgroup context for better attribution
+                                let cgroup_context = get_process_cgroup_context(proc.pid);
+                                let proc_context = if let Some(ref ctx) = cgroup_context {
+                                    format!("[{}] {}({})", ctx, proc.comm, proc.pid)
+                                } else {
+                                    format!("{}({})", proc.comm, proc.pid)
+                                };
+
                                 let reason = format!(
                                     "CPU thrashing sustained {}s: CPU={:.1}% PSI={:.1}%",
                                     duration, snapshot.cpu_percent, snapshot.psi_cpu_some_avg10
                                 );
 
+                                // PANIC THRESHOLD: At extreme PSI levels, skip freeze and kill immediately.
+                                // At >80% PSI, the kernel is essentially locked up - freeze is too risky.
+                                let is_panic_level = snapshot.psi_cpu_some_avg10 >= cb_cfg.psi_panic_threshold;
+                                
+                                // Check escalation strategy (but override if panic level)
+                                let use_freeze = cb_cfg.escalation_strategy == "freeze_first" && !is_panic_level;
+                                
+                                if is_panic_level {
+                                    warn!(
+                                        "[circuit_breaker] PANIC LEVEL DETECTED (PSI={:.1}% >= {:.1}%) - skipping freeze, executing SIGKILL",
+                                        snapshot.psi_cpu_some_avg10, cb_cfg.psi_panic_threshold
+                                    );
+                                }
+                                
+                                // Check if this process is already frozen and needs escalation to kill
+                                let already_frozen = frozen_processes.iter()
+                                    .find(|(pid, _, frozen_at)| {
+                                        *pid == proc.pid && 
+                                        frozen_at.elapsed().as_secs() >= cb_cfg.freeze_duration_secs
+                                    });
+
+                                let action = if use_freeze && already_frozen.is_none() {
+                                    // First offense: freeze the process (warning shot)
+                                    frozen_processes.push((proc.pid, proc.comm.clone(), std::time::Instant::now()));
+                                    cognitod::enforcement::ActionType::FreezeProcess { pid: proc.pid }
+                                } else {
+                                    // Either kill strategy, panic level, or freeze expired - execute kill
+                                    frozen_processes.retain(|(pid, _, _)| *pid != proc.pid);
+                                    cognitod::enforcement::ActionType::KillProcess {
+                                        pid: proc.pid,
+                                        signal: 9,
+                                    }
+                                };
+
+                                let action_name = match &action {
+                                    cognitod::enforcement::ActionType::FreezeProcess { .. } => "FROZEN",
+                                    cognitod::enforcement::ActionType::KillProcess { .. } => {
+                                        if is_panic_level { "PANIC_KILLED" } else { "KILLED" }
+                                    },
+                                    _ => "ACTION",
+                                };
+
                                 match queue_clone
                                     .propose_auto(
-                                        cognitod::enforcement::ActionType::KillProcess {
-                                            pid: proc.pid,
-                                            signal: 9,
-                                        },
+                                        action,
                                         reason.clone(),
                                         "circuit_breaker".to_string(),
                                         None,
@@ -976,8 +1138,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 {
                                     Ok(_) => {
                                         warn!(
-                                            "[circuit_breaker] AUTO-KILLED {}({}): {}",
-                                            proc.comm, proc.pid, reason
+                                            "[circuit_breaker] {} {}: {}",
+                                            action_name, proc_context, reason
                                         );
 
                                         if let Some(store) = incident_store_clone.as_ref() {
@@ -994,7 +1156,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                     snapshot.load_avg[1],
                                                     snapshot.load_avg[2]
                                                 ),
-                                                action: "auto_kill".to_string(),
+                                                action: format!("auto_{}", action_name.to_lowercase()),
                                                 target_pid: Some(proc.pid as i32),
                                                 target_name: Some(proc.comm.clone()),
                                                 system_snapshot: serde_json::to_string(&snapshot)
@@ -1047,9 +1209,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             }
                         }
                     }
-                } else if breach_started_at.is_some() {
-                    info!("[circuit_breaker] conditions normalized - grace period reset");
-                    breach_started_at = None;
+                } else {
+                    // Pressure normalized - unfreeze any frozen processes
+                    if breach_started_at.is_some() {
+                        info!("[circuit_breaker] conditions normalized - grace period reset");
+                        breach_started_at = None;
+                    }
+                    
+                    // Unfreeze processes if pressure is gone
+                    for (pid, comm, _) in frozen_processes.drain(..) {
+                        info!("[circuit_breaker] UNFREEZING {}({}) - pressure normalized", comm, pid);
+                        let _ = queue_clone
+                            .propose_auto(
+                                cognitod::enforcement::ActionType::UnfreezeProcess { pid },
+                                "Pressure normalized, resuming frozen process".to_string(),
+                                "circuit_breaker".to_string(),
+                                None,
+                                true, // Auto-approve unfreeze
+                            )
+                            .await;
+                    }
                 }
 
                 sleep(Duration::from_secs(cb_cfg.check_interval_secs)).await;
@@ -1102,6 +1281,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 info!("[enforcement] EXECUTING KILL pid={} signal={}", pid, signal);
                                 unsafe {
                                     libc::kill(pid as i32, signal);
+                                }
+                                let _ = queue_clone.complete(&action.id).await;
+                            }
+                            cognitod::enforcement::ActionType::FreezeProcess { pid } => {
+                                info!("[enforcement] EXECUTING FREEZE (SIGSTOP) pid={}", pid);
+                                unsafe {
+                                    libc::kill(pid as i32, libc::SIGSTOP);
+                                }
+                                let _ = queue_clone.complete(&action.id).await;
+                            }
+                            cognitod::enforcement::ActionType::UnfreezeProcess { pid } => {
+                                info!("[enforcement] EXECUTING UNFREEZE (SIGCONT) pid={}", pid);
+                                unsafe {
+                                    libc::kill(pid as i32, libc::SIGCONT);
+                                }
+                                let _ = queue_clone.complete(&action.id).await;
+                            }
+                            cognitod::enforcement::ActionType::ThrottleCgroup { ref cgroup_path, quota_us, period_us } => {
+                                info!("[enforcement] THROTTLING cgroup {} to {}/{}us", cgroup_path, quota_us, period_us);
+                                let cpu_max_path = format!("{}/cpu.max", cgroup_path);
+                                let value = format!("{} {}", quota_us, period_us);
+                                match std::fs::write(&cpu_max_path, &value) {
+                                    Ok(_) => info!("[enforcement] Successfully throttled {}", cgroup_path),
+                                    Err(e) => warn!("[enforcement] Failed to throttle {}: {}", cgroup_path, e),
                                 }
                                 let _ = queue_clone.complete(&action.id).await;
                             }

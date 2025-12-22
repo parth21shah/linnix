@@ -1,9 +1,50 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 const DEFAULT_CONFIG_PATH: &str = "/etc/linnix/linnix.toml";
 const ENV_CONFIG_PATH: &str = "LINNIX_CONFIG";
+
+// Re-export Docker enforcement types
+pub use crate::handler::docker::{ContainerAction, DockerEnforcementConfig};
+
+/// Warmth Keeper configuration (Pro feature)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WarmthConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_idle_threshold_secs")]
+    pub idle_threshold_secs: u64,
+    #[serde(default = "default_ping_interval_secs")]
+    pub ping_interval_secs: u64,
+}
+
+fn default_idle_threshold_secs() -> u64 {
+    600 // 10 minutes
+}
+
+fn default_ping_interval_secs() -> u64 {
+    60 // 1 minute
+}
+
+impl Default for WarmthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            idle_threshold_secs: default_idle_threshold_secs(),
+            ping_interval_secs: default_ping_interval_secs(),
+        }
+    }
+}
+
+/// Container definition for warmth keeper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerConfig {
+    pub name: String,
+    #[serde(default)]
+    pub warmth_url: Option<String>,
+}
 
 /// API server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +124,12 @@ pub struct Config {
     pub privacy: PrivacyConfig,
     #[serde(default)]
     pub psi: PsiConfig,
+    #[serde(default)]
+    pub docker_enforcement: Option<DockerEnforcementConfig>,
+    #[serde(default)]
+    pub warmth: WarmthConfig,
+    #[serde(default)]
+    pub containers: Vec<ContainerConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -138,10 +185,18 @@ impl Config {
     pub fn load() -> Self {
         let path =
             std::env::var(ENV_CONFIG_PATH).unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_string());
-        let path = PathBuf::from(path);
-        match fs::read_to_string(&path) {
+        Self::load_from(&PathBuf::from(path))
+    }
+
+    /// Load configuration from a specific file path.
+    /// If the file is missing or fails to parse, defaults are returned.
+    pub fn load_from(path: &PathBuf) -> Self {
+        match fs::read_to_string(path) {
             Ok(contents) => match toml::from_str(&contents) {
-                Ok(config) => config,
+                Ok(config) => {
+                    log::info!("Loaded config from {}", path.display());
+                    config
+                }
                 Err(e) => {
                     log::warn!(
                         "Failed to parse config file at {}: {}. Using defaults.",
@@ -151,7 +206,14 @@ impl Config {
                     Config::default()
                 }
             },
-            Err(_) => Config::default(),
+            Err(e) => {
+                log::warn!(
+                    "Failed to read config file at {}: {}. Using defaults.",
+                    path.display(),
+                    e
+                );
+                Config::default()
+            }
         }
     }
 }
@@ -383,6 +445,22 @@ pub struct CircuitBreakerConfig {
     /// In "monitor" mode, actions are proposed but NEVER executed automatically.
     #[serde(default = "default_circuit_breaker_mode")]
     pub mode: String,
+
+    /// Escalation strategy: "kill" (immediate) or "freeze_first" (SIGSTOP, then kill after timeout)
+    /// "freeze_first" is gentler - freezes the process for `freeze_duration_secs`, then kills if pressure persists.
+    #[serde(default = "default_escalation_strategy")]
+    pub escalation_strategy: String,
+
+    /// How long to freeze a process before escalating to kill (only if escalation_strategy = "freeze_first")
+    /// Keep this short (5-10s) - if pressure doesn't clear, it's not a temporary spike.
+    #[serde(default = "default_freeze_duration_secs")]
+    pub freeze_duration_secs: u64,
+
+    /// PSI "panic" threshold - skip freeze and kill immediately when pressure exceeds this.
+    /// At >80% PSI, the kernel is essentially locked up and freeze is too risky.
+    /// The Kernel OOM Killer may panic at any moment. Act decisively.
+    #[serde(default = "default_psi_panic_threshold")]
+    pub psi_panic_threshold: f32,
 }
 
 impl Default for CircuitBreakerConfig {
@@ -397,6 +475,9 @@ impl Default for CircuitBreakerConfig {
             grace_period_secs: default_grace_period_secs(),
             require_human_approval: default_require_human_approval(),
             mode: default_circuit_breaker_mode(),
+            escalation_strategy: default_escalation_strategy(),
+            freeze_duration_secs: default_freeze_duration_secs(),
+            psi_panic_threshold: default_psi_panic_threshold(),
         }
     }
 }
@@ -435,6 +516,18 @@ fn default_require_human_approval() -> bool {
 
 fn default_circuit_breaker_mode() -> String {
     "monitor".to_string() // Default to safe mode
+}
+
+fn default_escalation_strategy() -> String {
+    "kill".to_string() // Default: immediate kill. Use "freeze_first" for gentler approach.
+}
+
+fn default_freeze_duration_secs() -> u64 {
+    10 // Freeze for 10 seconds before escalating to kill (keep short - not a temp spike if it persists)
+}
+
+fn default_psi_panic_threshold() -> f32 {
+    80.0 // At >80% PSI, kernel is locked up - skip freeze, kill immediately
 }
 
 #[cfg(test)]

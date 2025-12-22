@@ -1,0 +1,56 @@
+# Linnix Pro Configuration - Vercel Alternative Features
+# Copy to /etc/linnix/pro-features.toml
+
+[runtime]
+offline = false
+
+[telemetry]
+sample_interval_ms = 1000
+
+[api]
+host = "0.0.0.0"
+port = 3000
+
+# Feature 1: Cloudflare CDN Auto-Purge
+[cloudflare]
+enabled = true
+api_token = "YOUR_CLOUDFLARE_API_TOKEN"  # Get from Cloudflare dashboard
+zone_id = "YOUR_ZONE_ID"                 # Found in domain overview
+purge_on_deployment = true               # Auto-purge on Coolify deployments
+
+# Feature 2: Zero Cold Starts (Container Warmth)
+[warmth]
+enabled = true
+idle_threshold_minutes = 10              # Start warming after 10 min idle
+ping_interval_seconds = 60               # Health check every 60 seconds
+health_path = "/health"                  # Default health check endpoint
+
+# Feature 3: DDoS Protection (eBPF Shield)
+[ddos]
+enabled = true
+rate_limit = 50                          # Max requests per second per IP
+ban_duration_minutes = 10                # Ban duration for abusive IPs
+use_iptables = true                      # Block at kernel level
+use_cloudflare = false                   # Also ban in Cloudflare WAF (requires API)
+
+# Feature 4: Instant Error Alerts (Discord Streamer)
+[discord]
+enabled = true
+webhook_url = "YOUR_DISCORD_WEBHOOK_URL"  # From Discord channel settings
+buffer_lines = 20                         # Lines of context to include
+keywords = ["error", "panic", "exception", "fatal", "crash"]
+
+# Customer Containers to Monitor
+[[containers]]
+name = "customer-site-1"
+domain = "example.com"
+warmth_url = "https://example.com/health"
+discord_alerts = true
+cloudflare_purge = true
+
+[[containers]]
+name = "customer-site-2"
+domain = "demo.example.com"
+warmth_url = "https://demo.example.com/api/health"
+discord_alerts = true
+cloudflare_purge = true

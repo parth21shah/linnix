@@ -45,3 +45,25 @@ enabled = true
 [psi]
 # Duration in seconds of sustained pressure required to trigger attribution
 sustained_pressure_seconds = 15
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Container Enforcement (Circuit Breaker)
+# ─────────────────────────────────────────────────────────────────────────────
+# Automatically pause/stop/kill containers when rule violations are detected.
+# IMPORTANT: Set enabled=true to activate enforcement.
+#
+# [docker_enforcement]
+# enabled = true
+# target_container = "my-victim-container"
+# default_action = "pause"  # Options: pause, stop, kill, restart
+# trigger_patterns = ["fork_storm", "oom_risk", "cpu_spin"]
+# grace_period_secs = 5
+# cooldown_secs = 60
+# max_actions_per_hour = 10
+#
+# # Override actions per rule (optional)
+# [docker_enforcement.rule_actions]
+# fork_storm = "pause"
+# oom_risk = "kill"
+# cpu_spin = "pause"
+

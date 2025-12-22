@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # The Guardian: Linnix crash-prevention agent
+  guardian:
+    container_name: linnix-guardian
+    build:
+      context: ../..
+      dockerfile: tests/docker/Dockerfile.agent
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      # Docker socket for pausing victim containers
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # eBPF requirements
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /sys/kernel/btf:/sys/kernel/btf:ro
+      - /proc:/host/proc:ro
+      # Persistent state
+      - linnix-data:/var/lib/linnix
+      # Log output
+      - ./logs:/var/log:rw
+    environment:
+      - RUST_LOG=info,cognitod=debug
+      - LINNIX_BPF_PATH=/opt/linnix/linnix-ai-ebpf-ebpf
+      - LINNIX_CONFIG=/etc/linnix/linnix.toml
+      # Offline mode to disable external HTTP calls
+      - LINNIX_OFFLINE=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "cognitod"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # The Victim: Untrusted workload container
+  victim:
+    container_name: linnix-victim
+    image: debian:bookworm-slim
+    # Start idle - we'll trigger stress manually
+    command: ["sleep", "infinity"]
+    # Strict resource limits to avoid killing the host
+    cpus: '0.5'
+    mem_limit: 200m
+    mem_reservation: 100m
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    depends_on:
+      guardian:
+        condition: service_healthy
+
+volumes:
+  linnix-data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

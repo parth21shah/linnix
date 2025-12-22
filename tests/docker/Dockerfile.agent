@@ -1,0 +1,88 @@
+# Multi-stage build for Linnix Agent
+# Stage 1: Rust builder with eBPF toolchain
+FROM rust:1.90-bookworm as builder
+
+# Install eBPF build dependencies
+RUN apt-get update && apt-get install -y \
+    llvm-15 \
+    clang-15 \
+    libelf-dev \
+    linux-headers-generic \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set LLVM/Clang environment for eBPF compilation
+ENV LLVM_SYS_150_PREFIX=/usr/lib/llvm-15
+ENV CC=clang-15
+ENV AR=llvm-ar-15
+
+# Create app directory
+WORKDIR /build
+
+# Copy workspace manifests first for dependency caching
+COPY Cargo.toml Cargo.lock ./
+COPY xtask ./xtask
+COPY cognitod ./cognitod
+COPY linnix-cli ./linnix-cli
+COPY linnix-reasoner ./linnix-reasoner
+COPY linnix-ai-ebpf ./linnix-ai-ebpf
+COPY deny.toml ./
+
+# Install nightly toolchain and rust-src for eBPF builds
+RUN rustup toolchain install nightly-2024-12-10 && \
+    rustup component add rust-src --toolchain nightly-2024-12-10
+
+# Install bpf-linker for eBPF artifact generation
+RUN cargo install bpf-linker
+
+# Build xtask helper first
+RUN cargo build --release -p xtask
+
+# Build eBPF programs using xtask
+RUN cargo run --release -p xtask -- build-ebpf --release
+
+# Build release binary
+RUN cargo build --release -p cognitod
+
+# Verify the binary exists
+RUN ls -lh /build/target/release/cognitod
+
+# Stage 2: Minimal runtime with Docker CLI
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    curl \
+    procps \
+    ca-certificates \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create linnix user (will run as root due to eBPF requirements)
+RUN mkdir -p /opt/linnix /var/lib/linnix /etc/linnix
+
+# Copy compiled binary from builder
+COPY --from=builder /build/target/release/cognitod /opt/linnix/cognitod
+
+# Copy eBPF artifacts
+COPY --from=builder /build/target/bpfel-unknown-none/release/linnix-ai-ebpf-ebpf /opt/linnix/linnix-ai-ebpf-ebpf
+
+# Copy configuration files
+COPY configs/linnix.toml /etc/linnix/linnix.toml
+COPY configs/rules.yaml /etc/linnix/rules.yaml
+
+# Copy the reflex wrapper script
+COPY tests/docker/reflex.sh /opt/linnix/reflex.sh
+RUN chmod +x /opt/linnix/reflex.sh
+
+# Set environment for eBPF object path
+ENV LINNIX_BPF_PATH=/opt/linnix/linnix-ai-ebpf-ebpf
+ENV RUST_LOG=info
+ENV LINNIX_CONFIG=/etc/linnix/linnix.toml
+
+WORKDIR /opt/linnix
+
+# The reflex script will handle starting cognitod and monitoring logs
+CMD ["/opt/linnix/reflex.sh"]

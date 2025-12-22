@@ -1,0 +1,65 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 1: Builder - Compile Linnix with native Docker enforcement
+# ──────────────────────────────────────────────────────────────────────────────
+FROM rust:1.90-bookworm AS builder
+
+# Install eBPF build dependencies
+RUN apt-get update && apt-get install -y \
+    llvm-15 \
+    clang-15 \
+    libelf-dev \
+    && ln -sf /usr/bin/clang-15 /usr/bin/clang \
+    && ln -sf /usr/bin/llc-15 /usr/bin/llc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install bpf-linker (latest stable)
+RUN cargo install bpf-linker
+
+# Install nightly toolchain for eBPF compilation
+RUN rustup toolchain install nightly-2024-12-10 && \
+    rustup component add rust-src --toolchain nightly-2024-12-10
+
+# Set working directory
+WORKDIR /build
+
+# Copy entire workspace (required for eBPF build)
+COPY . .
+
+# Build xtask first
+RUN cargo build --release -p xtask
+
+# Build eBPF programs
+RUN cargo xtask build-ebpf --release
+
+# Build cognitod release binary with native Docker enforcement
+RUN cargo build --release -p cognitod
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 2: Runtime - Minimal image with cognitod + Docker client
+# ──────────────────────────────────────────────────────────────────────────────
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy compiled binaries
+COPY --from=builder /build/target/release/cognitod /usr/local/bin/cognitod
+COPY --from=builder /build/target/bpf/linnix-ai-ebpf-ebpf.o /usr/local/share/linnix/linnix-ai-ebpf-ebpf.o
+
+# Copy configuration files
+COPY --from=builder /build/tests/docker/linnix-native.toml /etc/linnix/linnix.toml
+COPY --from=builder /build/configs/rules.yaml /etc/linnix/rules.yaml
+
+# Set environment
+ENV RUST_LOG=info
+ENV LINNIX_BPF_PATH=/usr/local/share/linnix/linnix-ai-ebpf-ebpf.o
+ENV LINNIX_CONFIG=/etc/linnix/linnix.toml
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+  CMD pgrep cognitod || exit 1
+
+# Direct execution of cognitod with native enforcement
+CMD ["/usr/local/bin/cognitod", "--config", "/etc/linnix/linnix.toml", "--handler", "rules:/etc/linnix/rules.yaml"]

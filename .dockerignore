@@ -30,6 +30,7 @@ CHANGELOG.md
 
 # Testing
 tests/
+!tests/docker/
 **/tests/
 *.test
 

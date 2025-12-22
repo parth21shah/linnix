@@ -13,6 +13,13 @@ use std::{io, mem, ptr, sync::Arc, thread, time::Duration};
 use tokio::io::unix::AsyncFd;
 use tokio::runtime::Handle;
 
+// Cache hostname to avoid repeated syscalls
+static HOSTNAME: once_cell::sync::Lazy<Option<String>> = once_cell::sync::Lazy::new(|| {
+    hostname::get()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+});
+
 fn event_label(kind: u32) -> &'static str {
     match kind {
         x if x == EventType::Exec as u32 => "Exec",
@@ -163,7 +170,8 @@ pub fn start_perf_listener(
                         continue;
                     }
 
-                    let mut event_for_llm = ProcessEvent::new(event_wire);
+                    let mut event_for_llm = ProcessEvent::new(event_wire)
+                        .with_hostname(HOSTNAME.clone());
                     let comm = std::str::from_utf8(&event_for_llm.comm)
                         .unwrap_or("invalid")
                         .trim_end_matches('\0')
@@ -208,6 +216,12 @@ pub fn start_perf_listener(
                             event_for_llm.gid,
                             comm
                         );
+                        
+                        // Track container activity for warmth keeper (Pro feature)
+                        if let Some(keeper) = crate::runtime::WARMTH_KEEPER.get() {
+                            keeper.record_activity(&comm);
+                        }
+                        
                         handlers_clone.on_event(&event_for_llm).await;
                         context_clone.add(event_for_llm);
                     });

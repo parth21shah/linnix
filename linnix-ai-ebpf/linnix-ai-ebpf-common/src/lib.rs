@@ -331,13 +331,24 @@ pub enum EventType {
 #[cfg(all(feature = "user", not(target_os = "none")))]
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProcessEventExt {
+    #[serde(flatten)]
     pub base: ProcessEvent,
+    #[cfg(all(feature = "user", not(target_os = "none")))]
+    pub hostname: Option<String>,
 }
 
 #[cfg(all(feature = "user", not(target_os = "none")))]
 impl ProcessEventExt {
     pub fn new(base: ProcessEvent) -> Self {
-        Self { base }
+        Self { 
+            base,
+            hostname: None,
+        }
+    }
+
+    pub fn with_hostname(mut self, hostname: Option<String>) -> Self {
+        self.hostname = hostname;
+        self
     }
 
     pub fn exit_time(&self) -> Option<u64> {

@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Guardian: Linnix with native Docker enforcement (no wrapper)
+  guardian-native:
+    container_name: linnix-guardian-native
+    build:
+      context: ../../
+      dockerfile: tests/docker/Dockerfile.native
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /sys/kernel/btf:/sys/kernel/btf:ro
+      - /proc:/proc:ro
+    environment:
+      - RUST_LOG=info,cognitod=debug
+      - LINNIX_BPF_PATH=/usr/local/share/linnix/linnix-ai-ebpf-ebpf.o
+      - LINNIX_CONFIG=/etc/linnix/linnix.toml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "cognitod"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Victim: Resource-limited container for testing
+  victim:
+    container_name: linnix-victim
+    image: debian:bookworm-slim
+    command: sleep infinity
+    depends_on:
+      guardian-native:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 200M
+    restart: unless-stopped

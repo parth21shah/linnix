@@ -49,6 +49,7 @@ walkdir = "2.5.0"
 memmap2 = "0.9"
 nix = { version = "0.29", features = ["time"] }
 ctrlc = "3.4"
+hostname = "0.4"
 
 [[bin]]
 name = "cognitod"

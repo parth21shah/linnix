@@ -1,0 +1,240 @@
+# Akash Provider Helm Chart Values
+# =================================
+# Aggressive Overcommitment Strategy - Protected by Linnix eBPF
+#
+# Hardware Profile (Hetzner 5-Node Cluster):
+#   Real: 60 vCPUs, 160GB RAM, 2TB NVMe
+#   Advertised: 150 vCPUs, 240GB RAM, 4TB Storage
+#
+# SAFETY: Linnix Guardian monitors PSI and kills/freezes bad tenants
+#         before they crash the system.
+
+# =============================================================================
+# PROVIDER IDENTITY
+# =============================================================================
+from: "akash1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # REPLACE with your address after import_wallet.sh
+
+# Provider attributes (shown in Akash marketplace)
+attributes:
+  - key: region
+    value: eu-central
+  - key: host
+    value: hetzner
+  - key: tier
+    value: community
+  - key: organization
+    value: linnix-protected
+  - key: capabilities/storage/1/class
+    value: beta2
+  - key: capabilities/storage/1/persistent
+    value: "true"
+
+# =============================================================================
+# AGGRESSIVE OVERCOMMITMENT (The Profit Engine)
+# =============================================================================
+# Linnix protects us, so we can safely overcommit resources.
+# When tenants collectively exceed physical capacity, Linnix intervenes:
+#   - PSI 35-80%: Freeze the offending process (warning shot)
+#   - PSI 80%+: Kill immediately (panic level)
+
+bidpricescript: |
+  #!/bin/bash
+  # Aggressive pricing to fill capacity fast
+  # These are prices per unit per block (~6 seconds)
+  
+  # CPU: $0.0025 per millicpu per block
+  # At 2.5x overcommit, effective cost is $0.001/millicpu
+  data["cpu"]="0.0025"
+  
+  # Memory: $0.001 per byte per block  
+  # At 1.5x overcommit, effective cost is $0.00067/byte
+  data["memory"]="0.001"
+  
+  # Storage: $0.0005 per byte per block
+  # At 2.0x overcommit, effective cost is $0.00025/byte
+  data["storage"]="0.0005"
+
+# Resource commitment levels (the magic numbers)
+resources:
+  # CPU Overcommitment: 2.5x
+  # Real: 60 cores → Advertise: 150 cores
+  # Risk: Linnix monitors CPU PSI and kills spinners
+  cpu_commit_level: 2.5
+  
+  # Memory Overcommitment: 1.5x  
+  # Real: 160GB → Advertise: 240GB
+  # Risk: Linnix monitors memory PSI and OOM offenders
+  # Note: ZRAM provides additional compression headroom
+  memory_commit_level: 1.5
+  
+  # Storage Overcommitment: 2.0x
+  # Real: 2TB → Advertise: 4TB
+  # Risk: Lower - thin provisioning is standard practice
+  storage_commit_level: 2.0
+
+# =============================================================================
+# CLUSTER CONFIGURATION
+# =============================================================================
+cluster:
+  # Use internal DNS for cluster communication
+  publicHostname: ""  # Will be set from ingress
+  
+  # Node configuration
+  node:
+    # Tolerate all taints (schedule on all nodes)
+    tolerations: []
+    
+  # Inventory configuration
+  inventory:
+    # How often to refresh resource inventory
+    poll_interval: 30s
+    
+    # Resource reservations (keep headroom for system)
+    reserved:
+      cpu: 500m      # 0.5 CPU for kubelet, containerd, etc.
+      memory: 1Gi    # 1GB for system services
+      storage: 10Gi  # 10GB for logs, etc.
+
+# =============================================================================
+# INGRESS CONTROLLER (Direct Public IP Binding)
+# =============================================================================
+ingress:
+  enabled: true
+  
+  # Use Nginx Ingress Controller
+  class: nginx
+  
+  # CRITICAL: hostNetwork mode to bind directly to public IPs
+  # This bypasses the need for a cloud LoadBalancer
+  controller:
+    hostNetwork: true
+    
+    # Bind to specific ports on host
+    hostPort:
+      enabled: true
+      ports:
+        http: 80
+        https: 443
+    
+    # DaemonSet ensures controller runs on every node
+    kind: DaemonSet
+    
+    # Node selector (optional - run on all nodes)
+    nodeSelector: {}
+    
+    # Tolerate all taints
+    tolerations:
+      - operator: Exists
+    
+    # Use host ports directly
+    service:
+      type: ClusterIP  # No LoadBalancer needed
+      
+    # Resource limits for ingress controller
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    
+    # Enable metrics for Prometheus
+    metrics:
+      enabled: true
+      port: 10254
+
+# Ingress domain for tenant deployments
+# Tenants will get: <deployment-id>.<provider-domain>
+domain: "provider.yourdomain.com"  # REPLACE with your domain
+
+# =============================================================================
+# NETWORKING
+# =============================================================================
+# IP Leases allow tenants to request dedicated public IPs
+ip_operator:
+  enabled: true
+  
+# Hostname operator for custom domains
+hostname_operator:
+  enabled: true
+
+# =============================================================================
+# PROVIDER POD CONFIGURATION
+# =============================================================================
+image:
+  repository: ghcr.io/akash-network/provider
+  tag: 0.6.4  # Check for latest version
+  pullPolicy: IfNotPresent
+
+# Provider resource requirements
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /status
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /status
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+# =============================================================================
+# CHAIN CONFIGURATION
+# =============================================================================
+chain:
+  # Akash mainnet
+  id: akashnet-2
+  
+  # RPC endpoints (use multiple for redundancy)
+  node:
+    - https://rpc.akashnet.net:443
+    - https://akash-rpc.polkachu.com:443
+    - https://rpc-akash.ecostake.com:443
+  
+  # Gas configuration
+  gas:
+    prices: 0.025uakt
+    adjustment: 1.5
+
+# =============================================================================
+# SECURITY
+# =============================================================================
+# The provider wallet key is stored in a Kubernetes Secret
+# Created by import_wallet.sh
+keyring:
+  backend: kubernetes
+  secretName: akash-provider-key
+
+# Pod security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# =============================================================================
+# OBSERVABILITY
+# =============================================================================
+# Prometheus metrics
+metrics:
+  enabled: true
+  port: 8080
+
+# Logging
+logging:
+  level: info
+  format: json

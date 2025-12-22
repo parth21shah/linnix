@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: akash-node
+  namespace: akash-services
+  labels:
+    app: akash-node
+spec:
+  ports:
+    - port: 26657
+      name: rpc
+      targetPort: 26657
+    - port: 1317
+      name: api
+      targetPort: 1317
+  selector:
+    app: akash-node
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: akash-node
+  namespace: akash-services
+spec:
+  serviceName: "akash-node"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akash-node
+  template:
+    metadata:
+      labels:
+        app: akash-node
+    spec:
+      initContainers:
+        - name: genesis-downloader
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ -f /root/.akash/config/genesis.json ]; then
+                echo "✅ Genesis already exists, skipping download."
+                exit 0
+              fi
+              
+              echo "🚀 Creating config directory..."
+              mkdir -p /root/.akash/config
+              
+              echo "📥 Downloading genesis.json..."
+              wget -q -O /root/.akash/config/genesis.json https://raw.githubusercontent.com/akash-network/net/main/mainnet/genesis.json
+              
+              echo "✅ Genesis downloaded successfully ($(stat -c%s /root/.akash/config/genesis.json) bytes)"
+          volumeMounts:
+            - name: data
+              mountPath: /root/.akash
+      containers:
+        - name: node
+          image: ghcr.io/akash-network/node:latest
+          command: ["akash"]
+          args: 
+            - "start"
+            - "--home=/root/.akash"
+            - "--minimum-gas-prices=0.025uakt"
+            - "--rpc.laddr=tcp://0.0.0.0:26657"
+            - "--api.enable=true"
+            - "--api.address=tcp://0.0.0.0:1317"
+            - "--p2p.seeds=27eb432ccd5e895c5c659659120d68b393dd8c60@35.247.65.183:26656,8e2f56098f182ffe2f6fb09280bafe13c63eb42f@46.101.176.149:26656"
+            - "--moniker=akash-provider-node"
+          ports:
+            - containerPort: 26657
+              name: rpc
+            - containerPort: 1317
+              name: api
+          volumeMounts:
+            - name: data
+              mountPath: /root/.akash
+          # Adjust resources based on your 20 vCPU availability
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "4Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+          readinessProbe:
+            tcpSocket:
+              port: 26657
+            initialDelaySeconds: 10
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 100Gi

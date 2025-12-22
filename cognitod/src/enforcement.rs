@@ -9,7 +9,14 @@ mod safety;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum ActionType {
+    /// Kill a process with specified signal (default: SIGKILL)
     KillProcess { pid: u32, signal: i32 },
+    /// Freeze a process (SIGSTOP) - can be resumed with SIGCONT
+    FreezeProcess { pid: u32 },
+    /// Unfreeze a previously frozen process (SIGCONT)
+    UnfreezeProcess { pid: u32 },
+    /// Throttle a cgroup by writing to cpu.max (microseconds per period)
+    ThrottleCgroup { cgroup_path: String, quota_us: u64, period_us: u64 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -93,6 +100,15 @@ impl EnforcementQueue {
         match &action {
             ActionType::KillProcess { pid, .. } => {
                 safety::SafetyGuard::is_safe_to_kill(*pid)?;
+            }
+            ActionType::FreezeProcess { pid } => {
+                safety::SafetyGuard::is_safe_to_kill(*pid)?; // Same safety rules
+            }
+            ActionType::UnfreezeProcess { .. } => {
+                // Unfreezing is always safe
+            }
+            ActionType::ThrottleCgroup { cgroup_path, .. } => {
+                safety::SafetyGuard::is_safe_cgroup(cgroup_path)?;
             }
         }
 

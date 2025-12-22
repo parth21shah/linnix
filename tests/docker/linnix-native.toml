@@ -1,0 +1,40 @@
+# Linnix Configuration - Docker Enforcement Test
+# This config enables native Docker circuit breaker enforcement
+
+[api]
+listen_addr = "127.0.0.1:3000"
+
+[runtime]
+offline = true
+
+[telemetry]
+sample_interval_ms = 1000
+retention_seconds = 60
+
+[reasoner]
+enabled = false
+
+[prometheus]
+enabled = true
+
+[psi]
+sustained_pressure_seconds = 15
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Container Enforcement - ENABLED FOR TESTING
+# ─────────────────────────────────────────────────────────────────────────────
+[docker_enforcement]
+enabled = true
+target_container = "linnix-victim"
+default_action = "pause"
+trigger_patterns = ["fork_storm", "oom_risk", "cpu_spin"]
+grace_period_secs = 5
+cooldown_secs = 60
+max_actions_per_hour = 10
+
+# Rule-specific actions
+[docker_enforcement.rule_actions]
+fork_storm = "pause"
+fork_storm_demo = "pause"
+oom_risk = "kill"
+cpu_spin = "pause"

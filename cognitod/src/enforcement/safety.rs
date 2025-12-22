@@ -10,6 +10,15 @@ static CRITICAL_NAMES: &[&str] = &[
     "dockerd",
 ];
 
+/// Cgroups that must never be throttled
+static CRITICAL_CGROUPS: &[&str] = &[
+    "/system.slice",
+    "/init.scope",
+    "/user.slice",
+    "kubepods/besteffort/kube-system",
+    "kubepods/burstable/kube-system",
+];
+
 pub struct SafetyGuard;
 
 impl SafetyGuard {
@@ -43,6 +52,16 @@ impl SafetyGuard {
             }
         }
 
+        Ok(())
+    }
+
+    /// Check if a cgroup path is safe to throttle
+    pub fn is_safe_cgroup(cgroup_path: &str) -> Result<(), String> {
+        for critical in CRITICAL_CGROUPS {
+            if cgroup_path.contains(critical) {
+                return Err(format!("cgroup '{}' is critical (matches '{}')", cgroup_path, critical));
+            }
+        }
         Ok(())
     }
 }

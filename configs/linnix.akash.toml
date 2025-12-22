@@ -1,0 +1,138 @@
+# Linnix Configuration for Akash Provider
+# =========================================
+# Optimized for resource overcommitment with ZRAM and eBPF protection
+#
+# Hardware Profile:
+#   CPU: i7-8700 (12 threads) → Advertise 25 vCPUs (2.5x overcommit)
+#   RAM: 64GB + ZRAM → Advertise 75GB (1.5x overcommit)
+#   Storage: 800GB NVMe → Advertise 2TB (2.5x overcommit)
+
+[api]
+# Listen on all interfaces (behind firewall)
+listen_addr = "0.0.0.0:3000"
+
+# Optional: Require API token for external access
+# auth_token = "your-secure-token-here"
+
+[logging]
+level = "info"
+
+[runtime]
+# Cognitod's own resource limits
+cpu_target_pct = 2      # Use max 2% CPU
+rss_cap_mb = 128        # Use max 128MB RAM
+offline = false         # Enable all external integrations
+
+[telemetry]
+# eBPF sampling configuration
+sample_interval_ms = 100  # 10 samples/second per CPU
+
+[psi]
+# PSI monitoring for per-pod pressure detection
+enabled = true
+sustained_pressure_seconds = 10  # Detect sustained stalls
+
+# ============================================================================
+# CIRCUIT BREAKER - The "Linnix Safety Net" for Overcommitment
+# ============================================================================
+# This is what allows you to safely run at 1.5x RAM and 2.5x CPU.
+# When tenants collectively exceed physical capacity, Linnix steps in.
+
+[circuit_breaker]
+enabled = true
+
+# --- Trigger Thresholds ---
+# Both conditions must be TRUE simultaneously for the duration of grace_period_secs
+
+# CPU: System-wide CPU usage must exceed this
+cpu_usage_threshold = 85.0
+
+# PSI CPU: Percentage of time processes are STALLED (not just busy)
+# PSI distinguishes "working hard" from "thrashing"
+# 35% PSI = 3.5 seconds out of every 10 spent waiting, not working
+cpu_psi_threshold = 35.0
+
+# PSI Memory: Percentage of time ALL processes are stalled on memory
+# This triggers when ZRAM is overwhelmed and real swapping begins
+memory_psi_full_threshold = 25.0
+
+# PSI I/O: Alert threshold (informational, doesn't trigger kill)
+io_psi_full_threshold = 50.0
+
+# --- Timing ---
+# Check every 2 seconds
+check_interval_secs = 2
+
+# Sustained breach required: Thresholds must be exceeded for 10 continuous seconds
+# This prevents transient spikes (e.g., apt update) from triggering
+grace_period_secs = 10
+
+# --- Enforcement Mode ---
+# "monitor" = Log only, never kill (for testing)
+# "enforce" = Actually kill the offending process
+mode = "enforce"
+
+# --- Human Approval ---
+# false = Auto-approve kills when circuit breaker triggers (recommended for Akash)
+# true  = Require manual approval via API/Slack (safer but slower)
+require_human_approval = false
+
+# --- Escalation Strategy ---
+# "kill"        = Immediately SIGKILL the heaviest process
+# "freeze_first" = SIGSTOP for freeze_duration_secs, then SIGKILL if pressure persists
+escalation_strategy = "freeze_first"
+
+# How long to freeze before escalating to kill (only if escalation_strategy = "freeze_first")
+freeze_duration_secs = 10
+
+# ============================================================================
+# OUTPUTS - Where to send alerts
+# ============================================================================
+
+[outputs]
+# Prometheus metrics endpoint at /metrics
+prometheus = true
+
+# Enable for Slack alerts (set SLACK_WEBHOOK_URL env var)
+# slack = true
+
+# Enable for PagerDuty (set PAGERDUTY_ROUTING_KEY env var)
+# pagerduty = true
+
+# ============================================================================
+# SLACK CONFIGURATION (Optional)
+# ============================================================================
+
+# [slack]
+# webhook_url = "${SLACK_WEBHOOK_URL}"  # Or set via environment variable
+# channel = "#akash-alerts"
+
+# ============================================================================
+# PAGERDUTY CONFIGURATION (Optional)
+# ============================================================================
+
+# [pagerduty]
+# routing_key = "${PAGERDUTY_ROUTING_KEY}"  # Or set via environment variable
+
+# ============================================================================
+# RULE ENGINE - Detection patterns for Akash workloads
+# ============================================================================
+# These run alongside the circuit breaker for more nuanced detection
+
+# [[rules]]
+# name = "akash_fork_storm"
+# description = "Tenant spawning too many processes"
+# detector = { type = "fork_rate", threshold = 100, window_secs = 5 }
+# severity = "critical"
+# 
+# [[rules]]
+# name = "akash_cpu_hog"
+# description = "Single tenant consuming excessive CPU"
+# detector = { type = "cpu_pct", threshold = 200, duration_secs = 30 }  # 200% = 2 cores
+# severity = "warning"
+# 
+# [[rules]]
+# name = "akash_memory_leak"
+# description = "Tenant RSS growing unbounded"
+# detector = { type = "rss_mb", threshold = 8192, duration_secs = 60 }  # 8GB
+# severity = "critical"
